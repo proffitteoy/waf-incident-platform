@@ -1,0 +1,3 @@
+﻿param()
+
+docker compose down
