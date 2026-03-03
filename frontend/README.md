@@ -18,8 +18,9 @@
 
 - `src/main.ts`：Vue 应用挂载。
 - `src/App.vue`：应用根组件。
-- `src/pages/DashboardPage.tsx`：仪表盘页面编排。
-- `src/components/OverviewPanel.tsx`：指标卡片组件。
+- `src/pages/DashboardPage.vue`：仪表盘页面编排。
+- `src/components/OverviewPanel.vue`：指标卡片组件。
+- `src/store/dashboard-store.ts`：仪表盘静态卡片数据源。
 
 ## 子板块文档
 
