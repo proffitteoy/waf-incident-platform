@@ -5,7 +5,7 @@
 - `pages/`：页面容器。
 - `store/`：页面数据模型。
 - `utils/`：API 访问工具。
-- `App.tsx`、`main.tsx`：应用入口。
+- `App.vue`、`main.ts`：应用入口。
 
 ## 边界
 - 前端只负责展示与交互，不承载后端安全决策。
@@ -14,5 +14,5 @@
 - 当前通过 `apiGet()` 访问后端 `/api/*`。
 
 ## 关键函数
-- `main.tsx`：React 挂载入口。
-- `App.tsx`：页面装配入口。
+- `main.ts`：Vue 挂载入口。
+- `App.vue`：页面装配入口。

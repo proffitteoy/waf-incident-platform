@@ -36,6 +36,13 @@
 - Redis：动作状态缓存与计数状态
 - `storage/*`：日志、pcap、报告文件
 
+5. 前端展示层（`frontend/src`）
+- Vue 3 + Vite 单页应用
+- `main.ts`：挂载 Vue 应用
+- `App.vue`：根组件
+- `pages/DashboardPage.vue`：仪表盘页面编排
+- `components/OverviewPanel.vue`：概览卡片展示
+
 ## 当前关键实现点
 
 - MVP 不启用独立事件关联引擎服务，分析由 LLM 直连完成。

@@ -22,7 +22,7 @@
 - 入口防护：Nginx/OpenResty + Coraza/ModSecurity + OWASP CRS
 - 后端：Node.js + TypeScript + Express
 - 存储：PostgreSQL + Redis + 本地文件（`storage/*`）
-- 前端：React + Vite
+- 前端：Vue 3 + Vite
 - 取证：tshark（由 worker 触发）
 - 分析：LLM API（MVP 直连）
 
