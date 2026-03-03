@@ -2,7 +2,7 @@
 
 ## 板块内容
 
-- React + Vite 单页骨架。
+- Vue 3 + Vite 单页骨架。
 - 当前实现总览卡片页面，后续扩展事件单、审批、取证页面。
 
 ## 边界
@@ -16,8 +16,8 @@
 
 ## 关键函数
 
-- `src/main.tsx`：React 根节点挂载。
-- `src/App.tsx`：页面入口。
+- `src/main.ts`：Vue 应用挂载。
+- `src/App.vue`：应用根组件。
 - `src/pages/DashboardPage.tsx`：仪表盘页面编排。
 - `src/components/OverviewPanel.tsx`：指标卡片组件。
 
