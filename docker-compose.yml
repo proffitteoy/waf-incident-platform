@@ -1,0 +1,24 @@
+﻿services:
+  postgres:
+    image: postgres:16
+    container_name: waf-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: waf_incident
+      POSTGRES_USER: waf_user
+      POSTGRES_PASSWORD: waf_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
+
+  redis:
+    image: redis:7-alpine
+    container_name: waf-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:

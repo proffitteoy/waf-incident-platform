@@ -1,0 +1,30 @@
+import { Router } from "express";
+import { actionsRouter } from "./routes/actions.routes";
+import { alertsRouter } from "./routes/alerts.routes";
+import { approvalsRouter } from "./routes/approvals.routes";
+import { assetsRouter } from "./routes/assets.routes";
+import { authRouter } from "./routes/auth.routes";
+import { dashboardRouter } from "./routes/dashboard.routes";
+import { eventsRouter } from "./routes/events.routes";
+import { forensicsRouter } from "./routes/forensics.routes";
+import { ingestionRouter } from "./routes/ingestion.routes";
+import { incidentsRouter } from "./routes/incidents.routes";
+import { llmReportsRouter } from "./routes/llm-reports.routes";
+import { mcpRouter } from "./routes/mcp.routes";
+import { policiesRouter } from "./routes/policies.routes";
+
+export const apiRouter = Router();
+
+apiRouter.use(authRouter);
+apiRouter.use("/dashboard", dashboardRouter);
+apiRouter.use(ingestionRouter);
+apiRouter.use("/events", eventsRouter);
+apiRouter.use("/alerts", alertsRouter);
+apiRouter.use("/incidents", incidentsRouter);
+apiRouter.use("/approvals", approvalsRouter);
+apiRouter.use(actionsRouter);
+apiRouter.use("/policies", policiesRouter);
+apiRouter.use("/assets", assetsRouter);
+apiRouter.use("/mcp", mcpRouter);
+apiRouter.use(forensicsRouter);
+apiRouter.use("/incidents", llmReportsRouter);
