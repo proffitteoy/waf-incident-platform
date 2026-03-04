@@ -84,7 +84,8 @@ incidentsRouter.get(
         [incidentId]
       ),
       query(
-        `SELECT id, model, attack_chain, key_iocs, risk_assessment, recommended_actions_low, recommended_actions_high, confidence, created_at
+        `SELECT id, model, task, prompt_version, prompt_digest, input_digest, attack_chain, key_iocs,
+                risk_assessment, recommended_actions_low, recommended_actions_high, confidence, created_at
          FROM llm_reports WHERE incident_id = $1 ORDER BY created_at DESC`,
         [incidentId]
       )

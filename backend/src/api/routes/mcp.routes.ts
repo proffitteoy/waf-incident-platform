@@ -134,7 +134,7 @@ mcpRouter.post(
           throw new HttpError(404, "incident has no events for llm analysis");
         }
 
-        const analysis = await analyzeIncidentWithLlmApi({
+        const llmResult = await analyzeIncidentWithLlmApi({
           requested_by: args.actor ?? "mcp",
           asset_id: null,
           src_ip: incidentResult.rows[0].src_ip ?? null,
@@ -153,7 +153,34 @@ mcpRouter.post(
           }))
         });
 
-        res.json({ data: analysis });
+        await query(
+          `INSERT INTO audit_logs (actor, action, target_type, target_id, detail)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            args.actor ?? "mcp",
+            "mcp_llm_analysis_completed",
+            "incident",
+            args.incident_id,
+            JSON.stringify({
+              provider: llmResult.meta.provider,
+              degraded: llmResult.meta.degraded,
+              attempts: llmResult.meta.attempts,
+              retries: llmResult.meta.retries,
+              latency_ms: llmResult.meta.latency_ms,
+              circuit_state: llmResult.meta.circuit_state,
+              task: llmResult.meta.task,
+              prompt_version: llmResult.meta.prompt_version,
+              prompt_digest: llmResult.meta.prompt_digest,
+              model: llmResult.meta.model,
+              model_version: llmResult.meta.model_version,
+              report_model: llmResult.meta.report_model,
+              input_digest: llmResult.meta.input_digest,
+              failure_reason: llmResult.meta.failure_reason
+            })
+          ]
+        );
+
+        res.json({ data: llmResult.analysis, llm_meta: llmResult.meta });
         return;
       }
 
