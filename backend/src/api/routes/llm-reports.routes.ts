@@ -7,6 +7,10 @@ import { analyzeIncidentWithLlmApi } from "../../services/llm/incident-analyzer"
 
 const reportSchema = z.object({
   model: z.string().default("manual"),
+  task: z.string().optional(),
+  prompt_version: z.string().optional(),
+  prompt_digest: z.string().optional(),
+  input_digest: z.string().optional(),
   attack_chain: z.array(z.any()).default([]),
   key_iocs: z.array(z.any()).default([]),
   risk_assessment: z.record(z.any()).default({}),
@@ -67,7 +71,7 @@ llmReportsRouter.post(
     );
 
     if (eventsResult.rowCount === 0) {
-      throw new HttpError(404, "未找到可分析的事件");
+      throw new HttpError(404, "no events available for analysis");
     }
 
     const events = eventsResult.rows;
@@ -82,7 +86,7 @@ llmReportsRouter.post(
     const incidentSrcIp = uniqueSrcIps.length > 0 ? uniqueSrcIps[0] : null;
     const maxRuleScore = Math.max(0, ...events.map((event) => event.rule_score ?? 0));
 
-    const analysis = await analyzeIncidentWithLlmApi({
+    const llmResult = await analyzeIncidentWithLlmApi({
       requested_by: input.requested_by,
       asset_id: incidentAssetId,
       src_ip: incidentSrcIp,
@@ -110,7 +114,15 @@ llmReportsRouter.post(
         `INSERT INTO incidents (asset_id, title, severity, status, first_seen, last_seen, src_ip, summary)
          VALUES ($1, $2, $3, 'open', $4, $5, $6, $7)
          RETURNING id, asset_id::text, title, severity, status, first_seen::text, last_seen::text, src_ip::text, summary, created_at::text, updated_at::text`,
-        [incidentAssetId, analysis.title, analysis.severity, firstSeen, lastSeen, incidentSrcIp, analysis.summary]
+        [
+          incidentAssetId,
+          llmResult.analysis.title,
+          llmResult.analysis.severity,
+          firstSeen,
+          lastSeen,
+          incidentSrcIp,
+          llmResult.analysis.summary
+        ]
       );
 
       const incident = incidentResult.rows[0];
@@ -124,32 +136,65 @@ llmReportsRouter.post(
         [
           incidentAssetId,
           incident.id,
-          analysis.title,
-          analysis.severity,
+          llmResult.analysis.title,
+          llmResult.analysis.severity,
           maxRuleScore,
           firstSeen,
           lastSeen,
           events.length,
-          analysis.summary
+          llmResult.analysis.summary
         ]
       );
 
       const reportResult = await client.query(
         `INSERT INTO llm_reports (
-           incident_id, model, attack_chain, key_iocs, risk_assessment,
-           recommended_actions_low, recommended_actions_high, confidence
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id, incident_id::text, model, attack_chain, key_iocs, risk_assessment,
-                   recommended_actions_low, recommended_actions_high, confidence, created_at::text`,
+           incident_id, model, task, prompt_version, prompt_digest, input_digest,
+           attack_chain, key_iocs, risk_assessment, recommended_actions_low,
+           recommended_actions_high, confidence
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         RETURNING id, incident_id::text, model, task, prompt_version, prompt_digest, input_digest,
+                   attack_chain, key_iocs, risk_assessment, recommended_actions_low,
+                   recommended_actions_high, confidence, created_at::text`,
         [
           incident.id,
-          "llm_api",
-          JSON.stringify(analysis.attack_chain),
-          JSON.stringify(analysis.key_iocs),
-          JSON.stringify(analysis.risk_assessment),
-          JSON.stringify(analysis.recommended_actions_low),
-          JSON.stringify(analysis.recommended_actions_high),
-          analysis.confidence ?? null
+          llmResult.meta.report_model,
+          llmResult.meta.task,
+          llmResult.meta.prompt_version,
+          llmResult.meta.prompt_digest,
+          llmResult.meta.input_digest,
+          JSON.stringify(llmResult.analysis.attack_chain),
+          JSON.stringify(llmResult.analysis.key_iocs),
+          JSON.stringify(llmResult.analysis.risk_assessment),
+          JSON.stringify(llmResult.analysis.recommended_actions_low),
+          JSON.stringify(llmResult.analysis.recommended_actions_high),
+          llmResult.analysis.confidence ?? null
+        ]
+      );
+
+      await client.query(
+        `INSERT INTO audit_logs (actor, action, target_type, target_id, detail)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          input.requested_by,
+          "llm_analysis_completed",
+          "incident",
+          incident.id,
+          JSON.stringify({
+            provider: llmResult.meta.provider,
+            degraded: llmResult.meta.degraded,
+            attempts: llmResult.meta.attempts,
+            retries: llmResult.meta.retries,
+            latency_ms: llmResult.meta.latency_ms,
+            circuit_state: llmResult.meta.circuit_state,
+            task: llmResult.meta.task,
+            prompt_version: llmResult.meta.prompt_version,
+            prompt_digest: llmResult.meta.prompt_digest,
+            model: llmResult.meta.model,
+            model_version: llmResult.meta.model_version,
+            report_model: llmResult.meta.report_model,
+            input_digest: llmResult.meta.input_digest,
+            failure_reason: llmResult.meta.failure_reason
+          })
         ]
       );
 
@@ -164,7 +209,10 @@ llmReportsRouter.post(
           JSON.stringify({
             source_events: events.length,
             generated_alert_id: alertResult.rows[0].id,
-            generated_report_id: reportResult.rows[0].id
+            generated_report_id: reportResult.rows[0].id,
+            llm_provider: llmResult.meta.provider,
+            llm_degraded: llmResult.meta.degraded,
+            llm_report_model: llmResult.meta.report_model
           })
         ]
       );
@@ -175,6 +223,7 @@ llmReportsRouter.post(
         incident,
         alert: alertResult.rows[0],
         llm_report: reportResult.rows[0],
+        llm_meta: llmResult.meta,
         source_events: events.length
       });
     } catch (error) {
@@ -190,8 +239,9 @@ llmReportsRouter.get(
   "/:id/llm-reports",
   asyncHandler(async (req, res) => {
     const result = await query(
-      `SELECT id, incident_id, model, attack_chain, key_iocs, risk_assessment,
-              recommended_actions_low, recommended_actions_high, confidence, created_at
+      `SELECT id, incident_id, model, task, prompt_version, prompt_digest, input_digest,
+              attack_chain, key_iocs, risk_assessment, recommended_actions_low,
+              recommended_actions_high, confidence, created_at
        FROM llm_reports
        WHERE incident_id = $1
        ORDER BY created_at DESC`,
@@ -209,14 +259,20 @@ llmReportsRouter.post(
 
     const result = await query(
       `INSERT INTO llm_reports (
-         incident_id, model, attack_chain, key_iocs, risk_assessment,
-         recommended_actions_low, recommended_actions_high, confidence
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, incident_id, model, attack_chain, key_iocs, risk_assessment,
+         incident_id, model, task, prompt_version, prompt_digest, input_digest,
+         attack_chain, key_iocs, risk_assessment, recommended_actions_low,
+         recommended_actions_high, confidence
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING id, incident_id, model, task, prompt_version, prompt_digest, input_digest,
+                 attack_chain, key_iocs, risk_assessment,
                  recommended_actions_low, recommended_actions_high, confidence, created_at`,
       [
         req.params.id,
         input.model,
+        input.task ?? null,
+        input.prompt_version ?? null,
+        input.prompt_digest ?? null,
+        input.input_digest ?? null,
         JSON.stringify(input.attack_chain),
         JSON.stringify(input.key_iocs),
         JSON.stringify(input.risk_assessment),

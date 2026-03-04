@@ -38,6 +38,10 @@
 
 说明：
 - `analyze-events` 由 `llm-reports.routes.ts` 提供，但通过 `/api/incidents` 前缀对外暴露。
+- `POST /api/incidents/analyze-events` 当前返回：`incident`、`alert`、`llm_report`、`llm_meta`、`source_events`。
+- `llm_meta` 当前包含：`provider`、`degraded`、`attempts`、`retries`、`latency_ms`、`circuit_state`、`task`、`prompt_version`、`prompt_digest`、`model`、`model_version`、`report_model`、`input_digest`、`failure_reason`。
+- `GET /api/incidents/:id` 与 `GET /api/incidents/:id/llm-reports` 返回的 `llm_reports` 当前包含：`model`、`task`、`prompt_version`、`prompt_digest`、`input_digest` 以及分析结果字段。
+- `POST /api/incidents/:id/llm-reports` 当前允许手工写入：`model`、`task`、`prompt_version`、`prompt_digest`、`input_digest`、`attack_chain`、`key_iocs`、`risk_assessment`、`recommended_actions_low`、`recommended_actions_high`、`confidence`。
 
 ## 处置与审批
 

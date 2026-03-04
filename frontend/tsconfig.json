@@ -11,7 +11,8 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "preserve",
+    "types": ["vitest/globals"],
     "strict": true
   },
-  "include": ["src"]
+  "include": ["src", "tests-layered/**/*.ts"]
 }
