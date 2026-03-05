@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
@@ -12,7 +13,12 @@
     "noEmit": true,
     "jsx": "preserve",
     "types": ["vitest/globals"],
+    "paths": {
+      "@vue/test-utils": ["./node_modules/@vue/test-utils"],
+      "vitest": ["./node_modules/vitest"],
+      "vue": ["./node_modules/vue"]
+    },
     "strict": true
   },
-  "include": ["src", "tests-layered/**/*.ts"]
+  "include": ["src", "../test/frontend/**/*.ts"]
 }

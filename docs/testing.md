@@ -6,15 +6,14 @@
 
 ## 分层测试目录
 
-- 测试说明索引：`tests/`
-- 后端新增分层测试：`backend/tests-layered/`
-- 前端新增组件测试：`frontend/tests-layered/`
+- 统一目录：`test/`
+- 后端测试：`test/backend/`
+- 前端测试：`test/frontend/`
 
 说明：
 
-- 历史单测仍保留在 `backend/tests/unit/`。
-- 根目录 `tests/` 仅保留测试分层说明与索引 README。
-- 可执行测试代码放在各自 package 内，避免跨 package 模块解析问题。
+- 所有可执行测试代码统一放在 `test/` 下。
+- 后端与前端配置都从 `test/` 目录加载测试文件。
 
 ## 日志回放
 
@@ -47,7 +46,7 @@ node replay.js tests/logs/sqli.log
 ## 单元测试
 
 - 框架：Jest
-- 目录：`backend/tests/unit/`
+- 目录：`test/backend/unit/`
 - 用例：
   - `correlator.test.js`
   - `policy-engine.test.js`

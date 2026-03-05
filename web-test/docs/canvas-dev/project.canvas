@@ -1,0 +1,212 @@
+﻿{
+  "nodes": [
+    {
+      "id": "group-entry",
+      "type": "group",
+      "x": -980,
+      "y": -260,
+      "width": 260,
+      "height": 720,
+      "label": "入口层"
+    },
+    {
+      "id": "group-routes",
+      "type": "group",
+      "x": -660,
+      "y": -260,
+      "width": 280,
+      "height": 720,
+      "label": "路由层"
+    },
+    {
+      "id": "group-services",
+      "type": "group",
+      "x": -320,
+      "y": -260,
+      "width": 320,
+      "height": 720,
+      "label": "服务层"
+    },
+    {
+      "id": "group-data-view",
+      "type": "group",
+      "x": 60,
+      "y": -260,
+      "width": 300,
+      "height": 720,
+      "label": "展示与数据层"
+    },
+    {
+      "id": "node-client",
+      "type": "text",
+      "x": -950,
+      "y": -200,
+      "width": 200,
+      "height": 140,
+      "text": "# 浏览器/curl\n- 内容访问\n- SQLi 请求\n- XSS 请求\n- 命令注入探测"
+    },
+    {
+      "id": "node-waf",
+      "type": "text",
+      "x": -950,
+      "y": -20,
+      "width": 200,
+      "height": 120,
+      "text": "# WAF + CRS\n- 规则匹配\n- 拦截或放行\n- 审计日志"
+    },
+    {
+      "id": "node-pages-route",
+      "type": "text",
+      "x": -620,
+      "y": -190,
+      "width": 220,
+      "height": 180,
+      "text": "# pages.routes\n- / /about\n- /articles/:slug\n- /search\n- /legacy/download"
+    },
+    {
+      "id": "node-api-route",
+      "type": "text",
+      "x": -620,
+      "y": 30,
+      "width": 220,
+      "height": 180,
+      "text": "# api.routes\n- /api/auth/login\n- /api/tools/ping-preview\n- /api/attack-scenarios\n- /api/files/read"
+    },
+    {
+      "id": "node-content-service",
+      "type": "text",
+      "x": -280,
+      "y": -200,
+      "width": 240,
+      "height": 130,
+      "text": "# content.service\n- listArticles\n- getArticleBySlug"
+    },
+    {
+      "id": "node-auth-service",
+      "type": "text",
+      "x": -280,
+      "y": -30,
+      "width": 240,
+      "height": 130,
+      "text": "# auth.service\n- SQL 拼接\n- 账号校验"
+    },
+    {
+      "id": "node-command-service",
+      "type": "text",
+      "x": -280,
+      "y": 140,
+      "width": 240,
+      "height": 130,
+      "text": "# command-preview.service\n- 命令预览\n- 不执行系统命令"
+    },
+    {
+      "id": "node-file-service",
+      "type": "text",
+      "x": -280,
+      "y": 310,
+      "width": 240,
+      "height": 140,
+      "text": "# file.service\n- 文件读取\n- 目录边界检查\n- 路径穿越探测"
+    },
+    {
+      "id": "node-views",
+      "type": "text",
+      "x": 90,
+      "y": -170,
+      "width": 230,
+      "height": 140,
+      "text": "# EJS 页面\n- home/about\n- articles/article\n- search/files"
+    },
+    {
+      "id": "node-data-files",
+      "type": "text",
+      "x": 90,
+      "y": 40,
+      "width": 230,
+      "height": 120,
+      "text": "# data/files\n- welcome.txt\n- policy.txt"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "fromNode": "node-client",
+      "toNode": "node-waf",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "数据流"
+    },
+    {
+      "id": "edge-2",
+      "fromNode": "node-waf",
+      "toNode": "node-pages-route",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "调用"
+    },
+    {
+      "id": "edge-3",
+      "fromNode": "node-waf",
+      "toNode": "node-api-route",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "调用"
+    },
+    {
+      "id": "edge-4",
+      "fromNode": "node-pages-route",
+      "toNode": "node-content-service",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "调用"
+    },
+    {
+      "id": "edge-5",
+      "fromNode": "node-api-route",
+      "toNode": "node-auth-service",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "调用"
+    },
+    {
+      "id": "edge-6",
+      "fromNode": "node-api-route",
+      "toNode": "node-command-service",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "调用"
+    },
+    {
+      "id": "edge-7",
+      "fromNode": "node-pages-route",
+      "toNode": "node-file-service",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "调用"
+    },
+    {
+      "id": "edge-8",
+      "fromNode": "node-api-route",
+      "toNode": "node-file-service",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "调用"
+    },
+    {
+      "id": "edge-9",
+      "fromNode": "node-pages-route",
+      "toNode": "node-views",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "数据流"
+    },
+    {
+      "id": "edge-10",
+      "fromNode": "node-file-service",
+      "toNode": "node-data-files",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "数据流"
+    }
+  ]
+}

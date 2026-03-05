@@ -1,10 +1,10 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "rootDir": ".",
+    "rootDir": "..",
     "noEmit": true,
     "types": ["node", "jest"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.js", "tests-layered/**/*.ts"],
+  "include": ["src/**/*.ts", "../test/backend/**/*.ts", "../test/backend/**/*.js", "../test/backend/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }
