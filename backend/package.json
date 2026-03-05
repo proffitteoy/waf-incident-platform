@@ -8,10 +8,10 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "test": "jest --runInBand --config jest.config.cjs",
-    "test:unit": "jest --runInBand --config jest.config.cjs tests/unit tests-layered/unit",
-    "test:module": "jest --runInBand --config jest.config.cjs tests-layered/module",
-    "test:integration": "jest --runInBand --config jest.config.cjs tests-layered/integration",
-    "test:workflow": "jest --runInBand --config jest.config.cjs tests-layered/workflow"
+    "test:unit": "jest --runInBand --config jest.config.cjs ../test/backend/unit",
+    "test:module": "jest --runInBand --config jest.config.cjs ../test/backend/module",
+    "test:integration": "jest --runInBand --config jest.config.cjs ../test/backend/integration",
+    "test:workflow": "jest --runInBand --config jest.config.cjs ../test/backend/workflow"
   },
   "dependencies": {
     "cors": "^2.8.5",
