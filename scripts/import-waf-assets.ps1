@@ -14,7 +14,7 @@ $crsPath = Resolve-Path (Join-Path $projectRoot $CrsSource)
 
 New-Item -ItemType Directory -Force -Path $rulesDir | Out-Null
 
-Copy-Item -Force (Join-Path $corazaPath "coraza.conf-recommended") (Join-Path $runtimeDir "coraza.conf")
+Copy-Item -Force (Join-Path $corazaPath "coraza.conf-recommended") (Join-Path $runtimeDir "modsecurity3.conf")
 Copy-Item -Force (Join-Path $crsPath "crs-setup.conf.example") (Join-Path $runtimeDir "crs-setup.conf")
 Copy-Item -Force (Join-Path $crsPath "rules\*.conf") $rulesDir
 Copy-Item -Force (Join-Path $crsPath "rules\REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf.example") (Join-Path $rulesDir "REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf")

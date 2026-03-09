@@ -6,7 +6,7 @@
 - 规则：OWASP CRS v4
 - 运行目录：`infrastructure/waf/runtime`
   - `main.conf`：统一加载入口
-  - `coraza.conf`：引擎基线
+  - `modsecurity3.conf`：引擎基线
   - `10-project-overrides.conf`：项目覆盖配置
   - `crs-setup.conf`：CRS 参数配置
   - `rules/*.conf`：规则文件
@@ -25,4 +25,4 @@
 ## 关键函数/入口
 
 - 入口配置：`runtime/main.conf`
-- 加载顺序：`coraza.conf -> 10-project-overrides.conf -> crs-setup.conf -> rules/*.conf`
+- 加载顺序：`modsecurity3.conf -> 10-project-overrides.conf -> crs-setup.conf -> rules/*.conf`
