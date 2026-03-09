@@ -2,7 +2,7 @@
 
 ## 板块内容
 - `main.conf`：WAF 运行入口。
-- `coraza.conf`：引擎基础配置。
+- `modsecurity3.conf`：引擎基础配置。
 - `10-project-overrides.conf`：项目覆盖参数。
 - `crs-setup.conf`：CRS 配置模板。
 - `rules/`：CRS 规则文件。
