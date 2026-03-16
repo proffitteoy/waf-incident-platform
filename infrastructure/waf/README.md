@@ -2,7 +2,7 @@
 
 ## 板块内容
 
-- 引擎：Coraza
+- 引擎： modsecurity
 - 规则：OWASP CRS v4
 - 运行目录：`infrastructure/waf/runtime`
   - `main.conf`：统一加载入口
