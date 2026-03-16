@@ -2,7 +2,7 @@
 
 ## 板块内容
 - `postgres/`：数据库初始化脚本。
-- `waf/`：Coraza + CRS 运行资产。
+- `waf/`：modsecrity3 + CRS 运行资产。
 - `nginx/`：反向代理入口层配置占位。
 
 ## 边界
