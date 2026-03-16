@@ -44,8 +44,8 @@
                 <el-radio-button label="30d">近 30 天</el-radio-button>
               </el-radio-group>
             </div>
-            <div class="panel-body chart-placeholder">
-              <span class="chart-placeholder-text">事件趋势图（待接入 ECharts）</span>
+            <div class="panel-body">
+              <div ref="trendChartRef" class="chart-container" />
             </div>
           </div>
         </el-col>
@@ -55,8 +55,8 @@
             <div class="panel-header">
               <span>风险等级分布</span>
             </div>
-            <div class="panel-body chart-placeholder">
-              <span class="chart-placeholder-text">风险分布饼图（待接入 ECharts）</span>
+            <div class="panel-body">
+              <div ref="riskChartRef" class="chart-container small" />
               <ul class="risk-legend">
                 <li v-for="item in riskDistribution" :key="item.level">
                   <span class="dot" :class="item.level" />
@@ -131,10 +131,24 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+
+let echarts
+// 延迟加载 ECharts，避免在 SSR 或测试环境报错
+onMounted(async () => {
+  if (!echarts) {
+    const mod = await import('echarts')
+    echarts = mod.default || mod
+  }
+  initCharts()
+})
+
+onBeforeUnmount(() => {
+  disposeCharts()
+})
 
 const statCards = ref([
   { key: 'today', label: '今日事件总数', value: 128, trendType: 'up', trendPrefix: '+', trendValue: '12.5%', type: 'primary' },
@@ -144,6 +158,12 @@ const statCards = ref([
 ])
 
 const trendRange = ref('7d')
+
+const trendChartRef = ref(null)
+const riskChartRef = ref(null)
+
+let trendChartInstance = null
+let riskChartInstance = null
 
 const riskDistribution = ref([
   { level: 'high', label: '高风险', value: 9 },
@@ -166,6 +186,124 @@ const healthItems = ref([
 const riskLabel = (level) => (level === 'high' ? '高' : level === 'medium' ? '中' : '低')
 const riskTagType = (level) => (level === 'high' ? 'danger' : level === 'medium' ? 'warning' : 'success')
 const statusLabel = (status) => ({ pending: '待分析', analyzed: '已分析', processed: '已处理', closed: '已关闭' }[status] || status)
+
+const getTrendData = () => {
+  const days = trendRange.value === '7d' ? 7 : 30
+  const labels = []
+  const values = []
+  const base = new Date()
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const d = new Date(base.getTime() - i * 24 * 60 * 60 * 1000)
+    const m = d.getMonth() + 1
+    const day = d.getDate()
+    labels.push(`${m}/${day}`)
+    // 简单的假数据：高风险波动更大
+    const baseVal = 20 + Math.round(Math.random() * 15)
+    values.push(baseVal + (i % 5 === 0 ? 15 : 0))
+  }
+  return { labels, values }
+}
+
+const initCharts = () => {
+  if (!echarts) return
+
+  if (trendChartRef.value) {
+    trendChartInstance = echarts.init(trendChartRef.value)
+    updateTrendChart()
+  }
+
+  if (riskChartRef.value) {
+    riskChartInstance = echarts.init(riskChartRef.value)
+    updateRiskChart()
+  }
+}
+
+const disposeCharts = () => {
+  if (trendChartInstance) {
+    trendChartInstance.dispose()
+    trendChartInstance = null
+  }
+  if (riskChartInstance) {
+    riskChartInstance.dispose()
+    riskChartInstance = null
+  }
+}
+
+const updateTrendChart = () => {
+  if (!trendChartInstance) return
+  const { labels, values } = getTrendData()
+  trendChartInstance.setOption({
+    tooltip: { trigger: 'axis' },
+    grid: { left: 40, right: 20, top: 30, bottom: 30 },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: '#9ca3af' } },
+      axisLabel: { color: '#9ca3af' },
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisLabel: { color: '#9ca3af' },
+      splitLine: { lineStyle: { color: 'rgba(148,163,184,0.2)' } },
+    },
+    series: [
+      {
+        name: '事件总数',
+        type: 'line',
+        smooth: true,
+        data: values,
+        areaStyle: {
+          color: 'rgba(59,130,246,0.18)',
+        },
+        lineStyle: {
+          color: '#3b82f6',
+          width: 2,
+        },
+        symbol: 'circle',
+        symbolSize: 6,
+      },
+    ],
+  })
+}
+
+const updateRiskChart = () => {
+  if (!riskChartInstance) return
+  riskChartInstance.setOption({
+    tooltip: { trigger: 'item' },
+    legend: { show: false },
+    series: [
+      {
+        type: 'pie',
+        radius: ['45%', '70%'],
+        avoidLabelOverlap: false,
+        label: { show: false, position: 'center' },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 14,
+            fontWeight: 'bold',
+          },
+        },
+        data: riskDistribution.value.map((item) => ({
+          name: item.label,
+          value: item.value,
+        })),
+      },
+    ],
+  })
+}
+
+watch(trendRange, () => {
+  updateTrendChart()
+})
+
+// 如果主题切换导致容器尺寸变化，可在需要时手动调用 resize
+window.addEventListener('resize', () => {
+  if (trendChartInstance) trendChartInstance.resize()
+  if (riskChartInstance) riskChartInstance.resize()
+})
 
 const handleRowClick = (row) => {
   router.push(`/incidents/${row.id}`)
@@ -255,17 +393,12 @@ const goIncidents = () => router.push('/incidents')
 .panel-body {
   padding: 12px 16px 16px;
 }
-.chart-placeholder {
-  position: relative;
+.chart-container {
+  width: 100%;
   height: 260px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--bg-surface);
 }
-.chart-placeholder-text {
-  font-size: 12px;
-  color: var(--muted-color);
+.chart-container.small {
+  height: 220px;
 }
 .risk-legend {
   margin-top: 16px;
