@@ -24,7 +24,8 @@ interface RedisEntry {
 
 interface CreateTestAppOptions {
   llmAnalyzeImplementation?: () => Promise<unknown>;
-  surface?: "llm-reports" | "workflow";
+  surface?: "llm-reports" | "workflow" | "ingestion";
+  envOverrides?: Record<string, string>;
 }
 
 export interface TestAppContext {
@@ -32,7 +33,7 @@ export interface TestAppContext {
   query: QueryFn;
   close: () => Promise<void>;
   redisStore: Map<string, RedisEntry>;
-  seedEventRaw: (overrides?: Partial<SeedEventInput>) => Promise<void>;
+  seedEventRaw: (overrides?: Partial<SeedEventInput>) => Promise<number>;
   seedIncident: (overrides?: Partial<SeedIncidentInput>) => Promise<{ id: string }>;
 }
 
@@ -162,6 +163,14 @@ export const createTestApp = async (options: CreateTestAppOptions = {}): Promise
   const redisStore = new Map<string, RedisEntry>();
 
   jest.resetModules();
+  const envBackup = { ...process.env };
+
+  if (options.envOverrides) {
+    for (const [key, value] of Object.entries(options.envOverrides)) {
+      process.env[key] = value;
+    }
+  }
+
   const dbPoolModule = require.resolve("../../backend/src/core/db/pool");
   const cacheModule = require.resolve("../../backend/src/core/cache/redis");
   const llmAnalyzerModule = require.resolve("../../backend/src/services/llm/incident-analyzer");
@@ -169,6 +178,7 @@ export const createTestApp = async (options: CreateTestAppOptions = {}): Promise
   const approvalsModule = require.resolve("../../backend/src/api/routes/approvals.routes");
   const actionsModule = require.resolve("../../backend/src/api/routes/actions.routes");
   const llmReportsModule = require.resolve("../../backend/src/api/routes/llm-reports.routes");
+  const ingestionModule = require.resolve("../../backend/src/api/routes/ingestion.routes");
 
   jest.doMock(dbPoolModule, () => ({
     pool: {
@@ -228,6 +238,10 @@ export const createTestApp = async (options: CreateTestAppOptions = {}): Promise
 
       app.use("/api/approvals", approvalsRouter);
       app.use("/api", actionsRouter);
+    } else if (options.surface === "ingestion") {
+      const { ingestionRouter } = require(ingestionModule);
+
+      app.use("/api", ingestionRouter);
     } else {
       const { llmReportsRouter } = require(llmReportsModule);
 
@@ -255,11 +269,12 @@ export const createTestApp = async (options: CreateTestAppOptions = {}): Promise
       ...overrides
     };
 
-    await query(
+    const result = await query<{ id: number }>(
       `INSERT INTO events_raw (
          ts, asset_id, src_ip, method, uri, status,
          waf_engine, rule_id, rule_msg, rule_score, waf_action, tags
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING id`,
       [
         input.ts,
         input.asset_id,
@@ -275,6 +290,8 @@ export const createTestApp = async (options: CreateTestAppOptions = {}): Promise
         JSON.stringify(input.tags)
       ]
     );
+
+    return result.rows[0].id;
   };
 
   const seedIncident = async (overrides: Partial<SeedIncidentInput> = {}) => {
@@ -314,6 +331,19 @@ export const createTestApp = async (options: CreateTestAppOptions = {}): Promise
     query,
     close: async () => {
       await pool.end();
+      for (const key of Object.keys(process.env)) {
+        if (!(key in envBackup)) {
+          delete process.env[key];
+        }
+      }
+
+      for (const [key, value] of Object.entries(envBackup)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
     },
     redisStore,
     seedEventRaw,
