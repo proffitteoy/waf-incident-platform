@@ -1,6 +1,8 @@
 import request from "supertest";
 import { createTestApp } from "../backend-test-utils";
 
+jest.setTimeout(20000);
+
 describe("POST /api/incidents/analyze-events", () => {
   test("creates incident, alert, llm_report and audit logs from events_raw", async () => {
     const context = await createTestApp({ surface: "llm-reports" });
@@ -43,6 +45,41 @@ describe("POST /api/incidents/analyze-events", () => {
         "llm_analysis_completed",
         "llm_incident_generated"
       ]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("accepts event_ids and prioritizes id-based lookup", async () => {
+    const context = await createTestApp({ surface: "llm-reports" });
+
+    try {
+      const firstId = await context.seedEventRaw({
+        src_ip: "198.51.100.10",
+        uri: "/selected"
+      });
+      await context.seedEventRaw({
+        src_ip: "198.51.100.20",
+        uri: "/ignored"
+      });
+
+      const response = await request(context.app)
+        .post("/api/incidents/analyze-events")
+        .send({
+          event_ids: [firstId],
+          src_ip: "203.0.113.255",
+          requested_by: "event-id-tester",
+          limit: 10
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.source_events).toBe(1);
+
+      const incidentRows = await context.query<{ src_ip: string | null }>(
+        "SELECT src_ip::text FROM incidents ORDER BY created_at DESC LIMIT 1"
+      );
+
+      expect(incidentRows.rows[0].src_ip).toBe("198.51.100.10");
     } finally {
       await context.close();
     }

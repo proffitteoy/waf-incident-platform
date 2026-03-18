@@ -3,6 +3,43 @@ import { z } from "zod";
 
 dotenv.config();
 
+const booleanFromEnv = z
+  .union([z.boolean(), z.string(), z.number()])
+  .optional()
+  .transform((value) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    if (typeof value === "number") {
+      if (value === 1) {
+        return true;
+      }
+
+      if (value === 0) {
+        return false;
+      }
+
+      throw new Error("expected 0 or 1 for boolean env value");
+    }
+
+    const normalized = value.trim().toLowerCase();
+
+    if (["1", "true", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+
+    if (["0", "false", "no", "off"].includes(normalized)) {
+      return false;
+    }
+
+    throw new Error(`invalid boolean env value: ${value}`);
+  });
+
 const envSchema = z.object({
   POSTGRES_HOST: z.string().default("localhost"),
   POSTGRES_PORT: z.coerce.number().int().default(5432),
@@ -28,6 +65,8 @@ const envSchema = z.object({
   LLM_CIRCUIT_BREAKER_THRESHOLD: z.coerce.number().int().positive().default(3),
   LLM_CIRCUIT_BREAKER_COOLDOWN_MS: z.coerce.number().int().positive().default(30000),
   LLM_FALLBACK_MODE: z.enum(["disabled", "deterministic"]).default("deterministic"),
+  AUTO_ANALYZE_ON_INGEST: booleanFromEnv.default(false),
+  AUTO_ANALYZE_ACTOR: z.string().min(1).default("ingestion-auto"),
   LOG_ARCHIVE_DIR: z.string().default("./storage/logs"),
   PCAP_DIR: z.string().default("./storage/pcap"),
   REPORT_DIR: z.string().default("./storage/reports"),
