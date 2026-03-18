@@ -82,6 +82,9 @@
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_KEY_PREFIX=waf:mvp
+      # 网关执行确认回传后端（用于动作 effective 状态确认）
+      - BACKEND_API_URL=http://backend:3000/api/actions/enforcement/confirm
+      - ACTUATOR_CONFIRM_TOKEN=
     volumes:
       # OpenResty Nginx 配置文件
       - ./infrastructure/nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
@@ -111,11 +114,21 @@
       - ./storage/pcap:/app/storage/pcap
     # 共享 WAF 的网络栈以实现流量抓取
     network_mode: "service:waf"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=waf_incident
+      - POSTGRES_USER=waf_user
+      - POSTGRES_PASSWORD=waf_password
+      - FORENSICS_POLL_INTERVAL_SEC=2
+      - FORENSICS_CAPTURE_INTERFACE=any
+      - FORENSICS_WORKER_ACTOR=forensics-worker
     cap_add:
       - NET_ADMIN
     # 需预先安装 tshark
-    command: sh -c "apt-get update && apt-get install -y tshark && pip install -r requirements.txt && python src/capture.py"
+    command: sh -c "apt-get update && apt-get install -y tshark && pip install -r requirements.txt && python src/worker.py"
     depends_on:
+      - postgres
       - waf
 
 volumes:

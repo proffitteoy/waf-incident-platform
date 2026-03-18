@@ -75,6 +75,17 @@ export const delRedisKey = async (key: string): Promise<number> => {
   return redisClient.del(key);
 };
 
+export const getRedisJson = async <T = unknown>(key: string): Promise<T | null> => {
+  ensureReady();
+  const raw = await redisClient.get(key);
+
+  if (raw === null) {
+    return null;
+  }
+
+  return JSON.parse(raw) as T;
+};
+
 export const getRedisHealth = () => {
   return {
     connected: redisClient.isReady,

@@ -1,4 +1,4 @@
-import { buildRedisKey, delRedisKey, setRedisJson } from "../../core/cache/redis";
+import { buildRedisKey, delRedisKey, getRedisJson, setRedisJson } from "../../core/cache/redis";
 
 export type ManagedActionType = "rate_limit" | "block" | "challenge";
 export type ManagedActionScope = "ip" | "uri" | "global";
@@ -50,4 +50,15 @@ export const clearActiveActionState = async (params: {
   const deleted = await delRedisKey(key);
 
   return { key, deleted };
+};
+
+export const getActiveActionState = async (params: {
+  scope: ManagedActionScope;
+  action_type: ManagedActionType;
+  target: string;
+}) => {
+  const key = buildActiveActionKey(params.scope, params.action_type, params.target);
+  const value = await getRedisJson<Record<string, unknown>>(key);
+
+  return { key, value, exists: value !== null };
 };

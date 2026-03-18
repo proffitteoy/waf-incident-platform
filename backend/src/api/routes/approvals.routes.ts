@@ -9,6 +9,7 @@ import {
   ManagedActionScope,
   ManagedActionType
 } from "../../services/policy/action-state";
+import { getActionExecutionView } from "../../services/policy/action-execution";
 
 const approveSchema = z.object({
   reviewer: z.string().default("approver"),
@@ -76,7 +77,7 @@ approvalsRouter.post(
         `INSERT INTO actions (
            incident_id, approval_id, action_type, scope, target, ttl_seconds,
            requested_by, executed_by, result, detail, rollback_token, executed_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'success', $9, $10, NOW())
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, NOW())
          RETURNING id, incident_id, action_type, scope, target, ttl_seconds, requested_by, executed_by, result, detail, rollback_token, created_at, executed_at`,
         [
           approval.incident_id,
@@ -106,6 +107,8 @@ approvalsRouter.post(
 
       await client.query("COMMIT");
       let redisKey: string | null = null;
+      let dispatchResult: "success" | "fail" = "success";
+      let dispatchDetail = `executed via approval ${approval.id}`;
 
       try {
         redisKey = await cacheActiveActionState({
@@ -119,10 +122,30 @@ approvalsRouter.post(
           executed_by: actionResult.rows[0].executed_by
         });
       } catch (error) {
+        dispatchResult = "fail";
+        dispatchDetail = `dispatch failed: ${error instanceof Error ? error.message : String(error)}`;
         logger.error("failed to cache approved action state", error instanceof Error ? error.message : error);
       }
 
-      res.json({ approval_id: approval.id, action: { ...actionResult.rows[0], redis_key: redisKey } });
+      const persistedAction = await query(
+        `UPDATE actions
+         SET result = $2, detail = $3
+         WHERE id = $1
+         RETURNING id, incident_id, action_type, scope, target, ttl_seconds, requested_by,
+                   executed_by, result, detail, rollback_token, created_at, executed_at`,
+        [actionResult.rows[0].id, dispatchResult, dispatchDetail]
+      );
+
+      const executionView = await getActionExecutionView(actionResult.rows[0].id);
+
+      res.json({
+        approval_id: approval.id,
+        action: {
+          ...persistedAction.rows[0],
+          redis_key: redisKey,
+          ...(executionView ?? {})
+        }
+      });
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

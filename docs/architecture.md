@@ -8,7 +8,7 @@
 
 围绕 OWASP CRS 命中事件构建可审计闭环：
 
-`Logs -> Parser -> Event Store -> LLM API Analyze -> Incident Store -> Policy -> (Auto Action | Approval) -> Actuator -> Action Log + Redis Action State -> Dashboard`
+`Logs -> Parser -> Event Store -> LLM API Analyze -> Incident Store -> Policy -> (Auto Action | Approval) -> Actuator -> Redis Action State -> Enforcement Confirm -> Action Log -> Dashboard`
 
 ## 分层与边界
 

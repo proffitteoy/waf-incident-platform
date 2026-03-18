@@ -51,16 +51,30 @@
 - `POST /api/approvals/:id/approve`
 - `POST /api/approvals/:id/reject`
 - `POST /api/actions/:id/rollback`
+- `POST /api/actions/enforcement/confirm`
+- `GET /api/actions/:id/status`
+- `GET /api/incidents/:id/actions/timeline`
 
 约束：
 - 执行动作必须写入 `actions` 表。
 - 回滚动作也作为独立动作写入 `actions` 表。
+- 动作响应需返回 `execution_state`，语义包含：`requested/dispatched/effective/expired/rolled_back/failed`。
+- 网关执行器命中后应调用 `POST /api/actions/enforcement/confirm` 回传 `action_id` 与命中信息，用于推进 `effective` 状态。
+- 若配置 `ACTUATOR_CONFIRM_TOKEN`，网关回传需携带请求头 `X-Actuator-Token`。
 
 ## 取证
 
 - `POST /api/incidents/:id/forensics/capture`
 - `GET /api/incidents/:id/forensics`
 - `GET /api/forensics/:fid/download`
+- `GET /api/forensics/:fid/file?token=...`
+
+约束：
+- `capture` 为异步任务入口，初始状态为 `queued`。
+- worker 会将状态推进为 `capturing -> completed|failed`。
+- `download` 在 `status != completed` 时返回 `409`。
+- `download` 在 `completed` 时返回短时签名下载地址 `download_url` 与 `expires_at`。
+- `file` 接口需校验签名 token，校验通过后返回 pcap 文件流。
 
 ## 策略与资产
 

@@ -24,7 +24,7 @@ interface RedisEntry {
 
 interface CreateTestAppOptions {
   llmAnalyzeImplementation?: () => Promise<unknown>;
-  surface?: "llm-reports" | "workflow";
+  surface?: "llm-reports" | "workflow" | "ingestion" | "forensics";
 }
 
 export interface TestAppContext {
@@ -169,6 +169,8 @@ export const createTestApp = async (options: CreateTestAppOptions = {}): Promise
   const approvalsModule = require.resolve("../../backend/src/api/routes/approvals.routes");
   const actionsModule = require.resolve("../../backend/src/api/routes/actions.routes");
   const llmReportsModule = require.resolve("../../backend/src/api/routes/llm-reports.routes");
+  const ingestionModule = require.resolve("../../backend/src/api/routes/ingestion.routes");
+  const forensicsModule = require.resolve("../../backend/src/api/routes/forensics.routes");
 
   jest.doMock(dbPoolModule, () => ({
     pool: {
@@ -194,6 +196,10 @@ export const createTestApp = async (options: CreateTestAppOptions = {}): Promise
     buildRedisKey: (...segments: string[]) => ["waf:test", ...segments].join(":"),
     setRedisJson: async (key: string, value: unknown, ttlSeconds?: number) => {
       redisStore.set(key, { value, ttl_seconds: ttlSeconds ?? null });
+    },
+    getRedisJson: async (key: string) => {
+      const entry = redisStore.get(key);
+      return entry ? entry.value : null;
     },
     delRedisKey: async (key: string) => {
       return redisStore.delete(key) ? 1 : 0;
@@ -228,6 +234,14 @@ export const createTestApp = async (options: CreateTestAppOptions = {}): Promise
 
       app.use("/api/approvals", approvalsRouter);
       app.use("/api", actionsRouter);
+    } else if (options.surface === "ingestion") {
+      const { ingestionRouter } = require(ingestionModule);
+
+      app.use("/api", ingestionRouter);
+    } else if (options.surface === "forensics") {
+      const { forensicsRouter } = require(forensicsModule);
+
+      app.use("/api", forensicsRouter);
     } else {
       const { llmReportsRouter } = require(llmReportsModule);
 

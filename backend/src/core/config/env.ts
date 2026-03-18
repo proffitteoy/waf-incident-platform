@@ -14,6 +14,7 @@ const envSchema = z.object({
   REDIS_PASSWORD: z.string().optional(),
   REDIS_DB: z.coerce.number().int().nonnegative().default(0),
   REDIS_KEY_PREFIX: z.string().default("waf:mvp"),
+  ACTUATOR_CONFIRM_TOKEN: z.string().optional(),
   BACKEND_PORT: z.coerce.number().int().default(3000),
   JWT_SECRET: z.string().default("replace-this-secret"),
   LLM_API_URL: z.string().url().optional(),
@@ -32,7 +33,9 @@ const envSchema = z.object({
   PCAP_DIR: z.string().default("./storage/pcap"),
   REPORT_DIR: z.string().default("./storage/reports"),
   TSHARK_BIN: z.string().default("tshark"),
-  DEFAULT_CAPTURE_WINDOW_MINUTES: z.coerce.number().int().default(5)
+  DEFAULT_CAPTURE_WINDOW_MINUTES: z.coerce.number().int().default(5),
+  FORENSICS_DOWNLOAD_SECRET: z.string().optional(),
+  FORENSICS_DOWNLOAD_TTL_SECONDS: z.coerce.number().int().positive().default(120)
 });
 
 export const env = envSchema.parse(process.env);

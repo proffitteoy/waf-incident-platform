@@ -13,6 +13,7 @@
 - `getRedisHealth()`：用于健康检查输出。
 - `buildRedisKey()`：统一前缀拼接。
 - `setRedisJson()`：写入 JSON（可带 TTL）。
+- `getRedisJson()`：读取 JSON 值（键不存在返回 `null`）。
 - `delRedisKey()`：删除键。
 
 ## 关键函数

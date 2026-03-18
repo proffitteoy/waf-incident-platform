@@ -33,8 +33,35 @@ describe("approval -> action -> rollback workflow", () => {
 
       expect(approveResponse.status).toBe(200);
       expect(context.redisStore.size).toBe(1);
+      expect(approveResponse.body.action.execution_state).toBe("dispatched");
 
       const actionId = approveResponse.body.action.id as string;
+
+      const beforeConfirmResponse = await request(context.app).get(`/api/actions/${actionId}/status`);
+
+      expect(beforeConfirmResponse.status).toBe(200);
+      expect(beforeConfirmResponse.body.execution_state).toBe("dispatched");
+
+      const confirmResponse = await request(context.app)
+        .post("/api/actions/enforcement/confirm")
+        .send({
+          action_id: actionId,
+          source: "waf-gateway",
+          scope: "ip",
+          action_type: "block",
+          target: "203.0.113.10",
+          http_status: 403,
+          reason: "block"
+        });
+
+      expect(confirmResponse.status).toBe(202);
+      expect(confirmResponse.body.execution_state).toBe("effective");
+
+      const effectiveStatusResponse = await request(context.app).get(`/api/actions/${actionId}/status`);
+
+      expect(effectiveStatusResponse.status).toBe(200);
+      expect(effectiveStatusResponse.body.execution_state).toBe("effective");
+
       const rollbackResponse = await request(context.app)
         .post(`/api/actions/${actionId}/rollback`)
         .send({
@@ -44,7 +71,14 @@ describe("approval -> action -> rollback workflow", () => {
 
       expect(rollbackResponse.status).toBe(200);
       expect(rollbackResponse.body.redis_cleared).toBe(true);
+      expect(rollbackResponse.body.execution_state).toBe("rolled_back");
       expect(context.redisStore.size).toBe(0);
+
+      const timelineResponse = await request(context.app).get(`/api/incidents/${incident.id}/actions/timeline`);
+
+      expect(timelineResponse.status).toBe(200);
+      expect(Array.isArray(timelineResponse.body.items)).toBe(true);
+      expect(timelineResponse.body.items.length).toBe(2);
 
       const approvals = await context.query<{ status: string; reviewed_by: string }>(
         "SELECT status, reviewed_by FROM approvals WHERE id = $1",
@@ -69,6 +103,7 @@ describe("approval -> action -> rollback workflow", () => {
       expect(actions.rows.every((entry: { result: string }) => entry.result === "success")).toBe(true);
       expect(auditLogs.rows.map((entry: { action: string }) => entry.action)).toEqual([
         "approval_approved",
+        "action_enforced",
         "action_rollback"
       ]);
     } finally {

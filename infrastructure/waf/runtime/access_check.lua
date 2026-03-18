@@ -108,6 +108,51 @@ local function cached_get_json(red, key)
     return result
 end
 
+-- 将网关命中事件回传后端，确认 action 已真实生效
+local function report_enforcement(action_payload, meta)
+    if type(action_payload) ~= "table" then
+        return
+    end
+
+    local action_id = action_payload.action_id
+    if not action_id or action_id == "" then
+        return
+    end
+
+    local payload = {
+        action_id = action_id,
+        source = "waf-gateway",
+        scope = meta.scope,
+        action_type = meta.action_type,
+        target = meta.target,
+        matched_key = meta.matched_key,
+        http_status = meta.http_status,
+        reason = meta.reason,
+        event_time = ngx.var.time_iso8601
+    }
+
+    local ok, body = pcall(cjson.encode, payload)
+    if not ok then
+        ngx.log(ngx.ERR, "failed to encode enforcement payload for action_id=", action_id)
+        return
+    end
+
+    local res = ngx.location.capture("/__policy/enforcement-confirm", {
+        method = ngx.HTTP_POST,
+        body = body
+    })
+
+    if not res or res.status >= 300 then
+        ngx.log(
+            ngx.WARN,
+            "enforcement confirm failed action_id=",
+            action_id,
+            " status=",
+            res and res.status or "nil"
+        )
+    end
+end
+
 -- 滑动窗口计数器：对 counter_key 执行 INCR，超出 RL_MAX_REQ 则返回 true
 -- window_sec 优先取后端存入 Redis 值里的 ttl_seconds，缺省用 RL_WINDOW_SEC
 local function rate_exceeded(red, counter_key, window_sec)
@@ -139,21 +184,51 @@ local function check_policy()
 
     -- ── Step 1: BLOCK 检查（最高优先级，返回 403）─────────────────────────────
     -- 检查顺序：global > ip > uri
-    if cached_key_exists(red, build_action_key("global", "block", "*")) then
+    local block_global_key = build_action_key("global", "block", "*")
+    local block_global_val = cached_get_json(red, block_global_key)
+    if block_global_val or cached_key_exists(red, block_global_key) then
+        report_enforcement(block_global_val, {
+            scope = "global",
+            action_type = "block",
+            target = "*",
+            matched_key = block_global_key,
+            http_status = 403,
+            reason = "block"
+        })
         release_redis_conn(red)
         ngx.log(ngx.WARN, "[BLOCK] scope=global ip=", client_ip)
         ngx.exit(403)
         return
     end
 
-    if cached_key_exists(red, build_action_key("ip", "block", client_ip)) then
+    local block_ip_key = build_action_key("ip", "block", client_ip)
+    local block_ip_val = cached_get_json(red, block_ip_key)
+    if block_ip_val or cached_key_exists(red, block_ip_key) then
+        report_enforcement(block_ip_val, {
+            scope = "ip",
+            action_type = "block",
+            target = client_ip,
+            matched_key = block_ip_key,
+            http_status = 403,
+            reason = "block"
+        })
         release_redis_conn(red)
         ngx.log(ngx.WARN, "[BLOCK] scope=ip ip=", client_ip)
         ngx.exit(403)
         return
     end
 
-    if cached_key_exists(red, build_action_key("uri", "block", client_uri)) then
+    local block_uri_key = build_action_key("uri", "block", client_uri)
+    local block_uri_val = cached_get_json(red, block_uri_key)
+    if block_uri_val or cached_key_exists(red, block_uri_key) then
+        report_enforcement(block_uri_val, {
+            scope = "uri",
+            action_type = "block",
+            target = client_uri,
+            matched_key = block_uri_key,
+            http_status = 403,
+            reason = "block"
+        })
         release_redis_conn(red)
         ngx.log(ngx.WARN, "[BLOCK] scope=uri uri=", client_uri, " ip=", client_ip)
         ngx.exit(403)
@@ -161,7 +236,17 @@ local function check_policy()
     end
 
     -- ── Step 2: CHALLENGE 检查（返回 401 触发 Basic Auth 质询）───────────────
-    if cached_key_exists(red, build_action_key("global", "challenge", "*")) then
+    local challenge_global_key = build_action_key("global", "challenge", "*")
+    local challenge_global_val = cached_get_json(red, challenge_global_key)
+    if challenge_global_val or cached_key_exists(red, challenge_global_key) then
+        report_enforcement(challenge_global_val, {
+            scope = "global",
+            action_type = "challenge",
+            target = "*",
+            matched_key = challenge_global_key,
+            http_status = 401,
+            reason = "challenge"
+        })
         release_redis_conn(red)
         ngx.log(ngx.WARN, "[CHALLENGE] scope=global ip=", client_ip)
         ngx.header["WWW-Authenticate"] = 'Basic realm="WAF Security Challenge"'
@@ -169,7 +254,17 @@ local function check_policy()
         return
     end
 
-    if cached_key_exists(red, build_action_key("ip", "challenge", client_ip)) then
+    local challenge_ip_key = build_action_key("ip", "challenge", client_ip)
+    local challenge_ip_val = cached_get_json(red, challenge_ip_key)
+    if challenge_ip_val or cached_key_exists(red, challenge_ip_key) then
+        report_enforcement(challenge_ip_val, {
+            scope = "ip",
+            action_type = "challenge",
+            target = client_ip,
+            matched_key = challenge_ip_key,
+            http_status = 401,
+            reason = "challenge"
+        })
         release_redis_conn(red)
         ngx.log(ngx.WARN, "[CHALLENGE] scope=ip ip=", client_ip)
         ngx.header["WWW-Authenticate"] = 'Basic realm="WAF Security Challenge"'
@@ -177,7 +272,17 @@ local function check_policy()
         return
     end
 
-    if cached_key_exists(red, build_action_key("uri", "challenge", client_uri)) then
+    local challenge_uri_key = build_action_key("uri", "challenge", client_uri)
+    local challenge_uri_val = cached_get_json(red, challenge_uri_key)
+    if challenge_uri_val or cached_key_exists(red, challenge_uri_key) then
+        report_enforcement(challenge_uri_val, {
+            scope = "uri",
+            action_type = "challenge",
+            target = client_uri,
+            matched_key = challenge_uri_key,
+            http_status = 401,
+            reason = "challenge"
+        })
         release_redis_conn(red)
         ngx.log(ngx.WARN, "[CHALLENGE] scope=uri uri=", client_uri, " ip=", client_ip)
         ngx.header["WWW-Authenticate"] = 'Basic realm="WAF Security Challenge"'
@@ -191,6 +296,14 @@ local function check_policy()
     if rl_global_val then
         local window = rl_global_val.ttl_seconds or RL_WINDOW_SEC
         if rate_exceeded(red, REDIS_PREFIX .. ":rl_count:global", window) then
+            report_enforcement(rl_global_val, {
+                scope = "global",
+                action_type = "rate_limit",
+                target = "*",
+                matched_key = build_action_key("global", "rate_limit", "*"),
+                http_status = 429,
+                reason = "rate_limit"
+            })
             release_redis_conn(red)
             ngx.log(ngx.WARN, "[RATE_LIMIT] scope=global exceeded ip=", client_ip)
             ngx.header["Retry-After"] = tostring(window)
@@ -203,6 +316,14 @@ local function check_policy()
     if rl_ip_val then
         local window = rl_ip_val.ttl_seconds or RL_WINDOW_SEC
         if rate_exceeded(red, REDIS_PREFIX .. ":rl_count:ip:" .. to_base64url(client_ip), window) then
+            report_enforcement(rl_ip_val, {
+                scope = "ip",
+                action_type = "rate_limit",
+                target = client_ip,
+                matched_key = build_action_key("ip", "rate_limit", client_ip),
+                http_status = 429,
+                reason = "rate_limit"
+            })
             release_redis_conn(red)
             ngx.log(ngx.WARN, "[RATE_LIMIT] scope=ip exceeded ip=", client_ip)
             ngx.header["Retry-After"] = tostring(window)
@@ -215,6 +336,14 @@ local function check_policy()
     if rl_uri_val then
         local window = rl_uri_val.ttl_seconds or RL_WINDOW_SEC
         if rate_exceeded(red, REDIS_PREFIX .. ":rl_count:uri:" .. to_base64url(client_uri), window) then
+            report_enforcement(rl_uri_val, {
+                scope = "uri",
+                action_type = "rate_limit",
+                target = client_uri,
+                matched_key = build_action_key("uri", "rate_limit", client_uri),
+                http_status = 429,
+                reason = "rate_limit"
+            })
             release_redis_conn(red)
             ngx.log(ngx.WARN, "[RATE_LIMIT] scope=uri exceeded uri=", client_uri, " ip=", client_ip)
             ngx.header["Retry-After"] = tostring(window)

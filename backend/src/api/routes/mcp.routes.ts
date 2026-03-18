@@ -12,6 +12,7 @@ import {
   ManagedActionScope,
   ManagedActionType
 } from "../../services/policy/action-state";
+import { getActionExecutionView } from "../../services/policy/action-execution";
 
 const invokeSchema = z.object({
   tool: z.string(),
@@ -194,7 +195,7 @@ mcpRouter.post(
           `INSERT INTO actions (
              incident_id, action_type, scope, target, ttl_seconds, requested_by,
              executed_by, result, detail, rollback_token, executed_at
-           ) VALUES ($1, $2, $3, $4, $5, $6, $6, 'success', $7, $8, NOW())
+           ) VALUES ($1, $2, $3, $4, $5, $6, $6, 'pending', $7, $8, NOW())
            RETURNING id, incident_id, action_type, scope, target, ttl_seconds, result, created_at, executed_at`,
           [
             args.incident_id,
@@ -208,6 +209,8 @@ mcpRouter.post(
           ]
         );
         let redisKey: string | null = null;
+        let dispatchResult: "success" | "fail" = "success";
+        let dispatchDetail = args.reason ?? `mcp ${actionType}`;
 
         try {
           redisKey = await cacheActiveActionState({
@@ -221,10 +224,22 @@ mcpRouter.post(
             executed_by: args.actor ?? "mcp"
           });
         } catch (error) {
+          dispatchResult = "fail";
+          dispatchDetail = `dispatch failed: ${error instanceof Error ? error.message : String(error)}`;
           logger.error("failed to cache mcp action state", error instanceof Error ? error.message : error);
         }
 
-        res.json({ data: { ...result.rows[0], redis_key: redisKey } });
+        const persisted = await query(
+          `UPDATE actions
+           SET result = $2, detail = $3
+           WHERE id = $1
+           RETURNING id, incident_id, action_type, scope, target, ttl_seconds, result, detail, created_at, executed_at`,
+          [result.rows[0].id, dispatchResult, dispatchDetail]
+        );
+
+        const executionView = await getActionExecutionView(result.rows[0].id);
+
+        res.json({ data: { ...persisted.rows[0], redis_key: redisKey, ...(executionView ?? {}) } });
         return;
       }
 
@@ -245,7 +260,7 @@ mcpRouter.post(
           `INSERT INTO actions (
              incident_id, action_type, scope, target, ttl_seconds, requested_by,
              executed_by, result, detail, rollback_token, executed_at
-           ) VALUES ($1, 'rollback', $2, $3, 0, 'mcp', 'mcp', 'success', $4, $5, NOW())
+           ) VALUES ($1, 'rollback', $2, $3, 0, 'mcp', 'mcp', 'pending', $4, $5, NOW())
            RETURNING id, incident_id, action_type, scope, target, result, created_at, executed_at`,
           [
             origin.rows[0].incident_id,
@@ -257,6 +272,8 @@ mcpRouter.post(
         );
         let redisCleared = false;
         let redisKey: string | null = null;
+        let rollbackResult: "success" | "fail" = "success";
+        let rollbackDetail = `rollback for ${args.action_id}`;
 
         if (origin.rows[0].action_type !== "rollback") {
           try {
@@ -268,11 +285,30 @@ mcpRouter.post(
             redisCleared = cleared.deleted > 0;
             redisKey = cleared.key;
           } catch (error) {
+            rollbackResult = "fail";
+            rollbackDetail = `rollback dispatch failed: ${error instanceof Error ? error.message : String(error)}`;
             logger.error("failed to clear mcp action state", error instanceof Error ? error.message : error);
           }
         }
 
-        res.json({ data: { ...rollback.rows[0], redis_key: redisKey, redis_cleared: redisCleared } });
+        const persisted = await query(
+          `UPDATE actions
+           SET result = $2, detail = $3
+           WHERE id = $1
+           RETURNING id, incident_id, action_type, scope, target, result, detail, created_at, executed_at`,
+          [rollback.rows[0].id, rollbackResult, rollbackDetail]
+        );
+
+        const executionView = await getActionExecutionView(rollback.rows[0].id);
+
+        res.json({
+          data: {
+            ...persisted.rows[0],
+            redis_key: redisKey,
+            redis_cleared: redisCleared,
+            ...(executionView ?? {})
+          }
+        });
         return;
       }
 
