@@ -1,2 +1,0 @@
-﻿welcome to web-test
-this file is for normal read demo.

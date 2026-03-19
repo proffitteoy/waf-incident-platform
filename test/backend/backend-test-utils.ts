@@ -24,7 +24,7 @@ interface RedisEntry {
 
 interface CreateTestAppOptions {
   llmAnalyzeImplementation?: () => Promise<unknown>;
-  surface?: "llm-reports" | "workflow" | "ingestion";
+  surface?: "llm-reports" | "workflow" | "ingestion" | "forensics";
   envOverrides?: Record<string, string>;
 }
 
@@ -179,6 +179,7 @@ export const createTestApp = async (options: CreateTestAppOptions = {}): Promise
   const actionsModule = require.resolve("../../backend/src/api/routes/actions.routes");
   const llmReportsModule = require.resolve("../../backend/src/api/routes/llm-reports.routes");
   const ingestionModule = require.resolve("../../backend/src/api/routes/ingestion.routes");
+  const forensicsModule = require.resolve("../../backend/src/api/routes/forensics.routes");
 
   jest.doMock(dbPoolModule, () => ({
     pool: {
@@ -242,6 +243,10 @@ export const createTestApp = async (options: CreateTestAppOptions = {}): Promise
       const { ingestionRouter } = require(ingestionModule);
 
       app.use("/api", ingestionRouter);
+    } else if (options.surface === "forensics") {
+      const { forensicsRouter } = require(forensicsModule);
+
+      app.use("/api", forensicsRouter);
     } else {
       const { llmReportsRouter } = require(llmReportsModule);
 

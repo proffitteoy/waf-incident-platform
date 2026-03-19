@@ -60,7 +60,16 @@
 
 - `POST /api/incidents/:id/forensics/capture`
 - `GET /api/incidents/:id/forensics`
+- `PATCH /api/forensics/:fid/status`
+- `GET /api/forensics/:fid`
 - `GET /api/forensics/:fid/download`
+
+说明：
+- `POST /api/incidents/:id/forensics/capture` 会先写入 `forensics` 记录（`queued`），随后异步触发 worker，并将状态推进为 `capturing/completed/failed`。
+- `PATCH /api/forensics/:fid/status` 为 worker 回调接口，用于回写 `status`、`sha256`、`size_bytes`、`error_message`。
+- `GET /api/forensics/:fid` 在任务 `completed` 时会返回 `download_url` 与 `expires_at`。
+- `GET /api/forensics/:fid/download` 在任务未完成时返回 `409`，已完成时返回 pcap 文件流；当开启 `FORENSICS_DOWNLOAD_TOKEN_REQUIRED=true` 时要求有效签名 token。
+- 下载接口会做 pcap 路径约束，确保文件路径不越出 `PCAP_DIR`。
 
 ## 策略与资产
 

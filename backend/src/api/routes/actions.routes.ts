@@ -10,6 +10,7 @@ import {
   ManagedActionScope,
   ManagedActionType
 } from "../../services/policy/action-state";
+import { scheduleActionVerification } from "../../services/policy/action-verifier";
 
 const executeActionSchema = z.object({
   action_type: z.enum(["rate_limit", "block", "challenge"]),
@@ -49,7 +50,7 @@ actionsRouter.post(
       `INSERT INTO actions (
          incident_id, action_type, scope, target, ttl_seconds, requested_by,
          executed_by, result, detail, rollback_token, executed_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'success', $8, $9, NOW())
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, NOW())
        RETURNING id, incident_id, action_type, scope, target, ttl_seconds, requested_by,
                  executed_by, result, detail, rollback_token, created_at, executed_at`,
       [
@@ -93,6 +94,16 @@ actionsRouter.post(
     } catch (error) {
       logger.error("failed to cache active action state", error instanceof Error ? error.message : error);
     }
+
+    scheduleActionVerification({
+      action_id: result.rows[0].id,
+      incident_id: req.params.id,
+      action_type: input.action_type,
+      scope: input.scope,
+      target: input.target,
+      actor: input.executed_by,
+      operation: "apply"
+    });
 
     res.status(201).json({ ...result.rows[0], redis_key: redisKey });
   })
@@ -146,7 +157,7 @@ actionsRouter.post(
       `INSERT INTO actions (
          incident_id, action_type, scope, target, ttl_seconds, requested_by,
          executed_by, result, detail, rollback_token, executed_at
-       ) VALUES ($1, 'rollback', $2, $3, 0, $4, $4, 'success', $5, $6, NOW())
+       ) VALUES ($1, 'rollback', $2, $3, 0, $4, $4, 'pending', $5, $6, NOW())
        RETURNING id, incident_id, action_type, scope, target, ttl_seconds, requested_by,
                  executed_by, result, detail, rollback_token, created_at, executed_at`,
       [
@@ -186,6 +197,18 @@ actionsRouter.post(
       } catch (error) {
         logger.error("failed to clear active action state", error instanceof Error ? error.message : error);
       }
+    }
+
+    if (origin.action_type !== "rollback") {
+      scheduleActionVerification({
+        action_id: rollbackResult.rows[0].id,
+        incident_id: origin.incident_id,
+        action_type: origin.action_type,
+        scope: origin.scope,
+        target: origin.target,
+        actor: input.actor,
+        operation: "rollback"
+      });
     }
 
     res.json({ ...rollbackResult.rows[0], redis_key: redisKey, redis_cleared: redisCleared });

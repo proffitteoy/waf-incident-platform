@@ -1,0 +1,69 @@
+:root {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 主题变量：浅色 / 深色 */
+html[data-theme='light'] {
+  color-scheme: light;
+  --bg-root: #f3f4f6;
+  --bg-header: #ffffff;
+  --bg-sider: #f9fafb;
+  --bg-surface: #ffffff;
+  --border-color: #e5e7eb;
+  --text-color: #111827; /* 主文字：近乎黑色，保证可读 */
+  --muted-color: #374151; /* 次要文字：深灰，仍然清晰 */
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-root: #020617;
+  --bg-header: #020617;
+  --bg-sider: #020617;
+  --bg-surface: #020617;
+  --border-color: #1f2937;
+  --text-color: #e5e7eb;
+  --muted-color: #9ca3af;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background-color: var(--bg-root);
+  color: var(--text-color);
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+.card {
+  padding: 2em;
+}
+
+#app {
+  margin: 0;
+  padding: 0;
+}
+

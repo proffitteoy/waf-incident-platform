@@ -1,3 +1,0 @@
-﻿- low risk: rate limit
-- medium risk: challenge
-- high risk: approval before block
