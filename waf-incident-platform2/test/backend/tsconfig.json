@@ -1,0 +1,13 @@
+{
+  "extends": "../../backend/tsconfig.test.json",
+  "compilerOptions": {
+    "baseUrl": "../../backend",
+    "moduleResolution": "Node",
+    "types": ["node", "jest"],
+    "typeRoots": ["../../backend/node_modules/@types"],
+    "paths": {
+      "@jest/globals": ["node_modules/@jest/globals"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.d.ts"]
+}

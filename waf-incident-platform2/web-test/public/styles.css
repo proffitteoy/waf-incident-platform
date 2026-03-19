@@ -1,0 +1,90 @@
+﻿:root {
+  --bg: #f6f8fa;
+  --text: #1b1f24;
+  --card: #ffffff;
+  --line: #d0d7de;
+  --danger: #b42318;
+  --accent: #175fe9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', 'PingFang SC', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.container {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.top-nav {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.danger {
+  border-color: #f3b3ac;
+}
+
+.highlight {
+  border-left: 4px solid var(--accent);
+}
+
+h1,
+h2 {
+  margin: 0 0 12px;
+}
+
+p,
+li,
+a,
+label,
+input,
+button,
+pre {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+pre {
+  white-space: pre-wrap;
+  margin: 0;
+}
