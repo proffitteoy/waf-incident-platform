@@ -1,0 +1,117 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: waf-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: waf_incident
+      POSTGRES_USER: waf_user
+      POSTGRES_PASSWORD: waf_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - waf-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: waf-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - waf-net
+
+  # 后端服务：负责日志分析、策略执行与 API
+  backend:
+    image: node:20-alpine
+    container_name: waf-backend
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./storage/logs:/app/storage/logs
+      - ./storage/pcap:/app/storage/pcap
+      // 修复：挂载取证脚本目录，确保 spawn 能找到 python 脚本
+      - ./services/forensics-worker:/app/services/forensics-worker
+    environment:
+      - PORT=3000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=waf_user
+      - DB_PASSWORD=waf_password
+      - DB_NAME=waf_incident
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      // 修复：spawn 的子进程与 backend 同容器，故回调地址必须是 localhost
+      - BACKEND_API_URL=http://localhost:3000
+    // 修复：确保安装 python3 和 wireshark-cli (含 tshark)，并设置 PATH 以便 spawn 找到
+    command: >
+      sh -c "apk add --no-cache python3 tshark wireshark-cli &&
+             if [ ! -d node_modules ]; then npm install; fi &&
+             npm run dev"
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "3000:3000"
+    networks:
+      - waf-net
+
+  # 前端服务：仪表盘可视化
+  frontend:
+    image: node:20-alpine
+    container_name: waf-frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "if [ ! -d node_modules ]; then npm install; fi && npm run dev -- --host"
+    ports:
+      - "5173:5173"
+    networks:
+      - waf-net
+
+  # WAF 网关：OpenResty + ModSecurity + Lua Actuator
+  waf:
+    build:
+      context: ./infrastructure/waf
+      dockerfile: Dockerfile
+    container_name: waf-gateway
+    restart: always
+    ports:
+      - "80:80"
+    environment:
+      # 目标网站地址
+      - WEBSITE_URL=http://host.docker.internal:8080
+      # Redis 连接配置 (供 Lua 脚本使用)
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_KEY_PREFIX=waf:mvp
+    volumes:
+      # OpenResty Nginx 配置文件
+      - ./infrastructure/nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      # Lua 脚本
+      - ./infrastructure/waf/runtime/access_check.lua:/usr/local/openresty/nginx/lua/access_check.lua
+      # WAF 规则与配置
+      - ./infrastructure/waf/runtime/modsecurity3.conf:/etc/modsecurity.d/modsecurity.conf
+      - ./infrastructure/waf/runtime/crs-setup.conf:/etc/modsecurity.d/crs-setup.conf
+      - ./infrastructure/waf/runtime/10-project-overrides.conf:/etc/modsecurity.d/10-project-overrides.conf
+      - ./infrastructure/waf/runtime/main.conf:/etc/modsecurity.d/main.conf
+      - ./infrastructure/waf/runtime/rules:/etc/modsecurity.d/rules
+      # 日志共享
+      - ./storage/logs:/var/log/modsec
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - waf-net
+
+volumes:
+  postgres_data:
+
+networks:
+  waf-net:
+    driver: bridge
