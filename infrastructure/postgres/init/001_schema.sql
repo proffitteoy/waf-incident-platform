@@ -94,6 +94,18 @@ CREATE TABLE IF NOT EXISTS actions (
   executed_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS action_receipts (
+  id BIGSERIAL PRIMARY KEY,
+  action_id UUID NOT NULL REFERENCES actions(id) ON DELETE CASCADE,
+  operation TEXT NOT NULL CHECK (operation IN ('apply', 'rollback')),
+  status TEXT NOT NULL CHECK (status IN ('success', 'fail', 'timeout', 'skipped')),
+  observed_status INTEGER,
+  reason TEXT,
+  probe_mode TEXT NOT NULL DEFAULT 'gateway_probe',
+  detail JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS forensics (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
@@ -166,6 +178,8 @@ CREATE INDEX IF NOT EXISTS idx_events_raw_asset_id ON events_raw(asset_id);
 CREATE INDEX IF NOT EXISTS idx_alerts_status_severity ON alerts(status, severity);
 CREATE INDEX IF NOT EXISTS idx_incidents_status_severity ON incidents(status, severity);
 CREATE INDEX IF NOT EXISTS idx_actions_incident_id ON actions(incident_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_actions_result_created ON actions(result, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_action_receipts_action_id ON action_receipts(action_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_forensics_incident_id ON forensics(incident_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_llm_reports_incident_id ON llm_reports(incident_id, created_at DESC);

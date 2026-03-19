@@ -34,6 +34,7 @@
       - /app/node_modules
       - ./storage/logs:/app/storage/logs
       - ./storage/pcap:/app/storage/pcap
+      - ./services/forensics-worker:/services/forensics-worker
     environment:
       - PORT=3000
       - DB_HOST=postgres
@@ -43,7 +44,12 @@
       - DB_NAME=waf_incident
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-    command: sh -c "if [ ! -d node_modules ]; then npm install; fi && npm run dev"
+      - BACKEND_API_URL=http://localhost:3000
+      - FORENSICS_PYTHON_BIN=python3
+      - FORENSICS_DOWNLOAD_TOKEN_REQUIRED=false
+      - FORENSICS_DOWNLOAD_SIGNING_SECRET=change-this-forensics-secret
+      - FORENSICS_DOWNLOAD_URL_TTL_SECONDS=300
+    command: sh -c "apk add --no-cache python3 tshark && if [ ! -d node_modules ]; then npm install; fi && npm run dev"
     depends_on:
       - postgres
       - redis
@@ -58,7 +64,7 @@
     container_name: waf-frontend
     working_dir: /app
     volumes:
-      - ./frontend:/app
+      - ./frontends:/app
       - /app/node_modules
     command: sh -c "if [ ! -d node_modules ]; then npm install; fi && npm run dev -- --host"
     ports:

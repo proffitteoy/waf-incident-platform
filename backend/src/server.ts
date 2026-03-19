@@ -3,9 +3,11 @@ import { env } from "./core/config/env";
 import { closeRedis, connectRedis } from "./core/cache/redis";
 import { pool } from "./core/db/pool";
 import { logger } from "./core/logger";
+import { startActionWatchdog, stopActionWatchdog } from "./services/policy/action-watchdog";
 
 const bootstrap = async () => {
   await connectRedis();
+  startActionWatchdog();
 
   const server = app.listen(env.BACKEND_PORT, () => {
     logger.info(`backend listening on :${env.BACKEND_PORT}`);
@@ -22,6 +24,7 @@ const bootstrap = async () => {
     logger.info(`received ${signal}, shutting down`);
 
     server.close(async () => {
+      stopActionWatchdog();
       await Promise.allSettled([closeRedis(), pool.end()]);
       logger.info("shutdown complete");
       process.exit(0);

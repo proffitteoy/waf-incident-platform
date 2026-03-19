@@ -11,7 +11,8 @@
     "test:unit": "jest --runInBand --config jest.config.cjs ../test/backend/unit",
     "test:module": "jest --runInBand --config jest.config.cjs ../test/backend/module",
     "test:integration": "jest --runInBand --config jest.config.cjs ../test/backend/integration",
-    "test:workflow": "jest --runInBand --config jest.config.cjs ../test/backend/workflow"
+    "test:workflow": "jest --runInBand --config jest.config.cjs ../test/backend/workflow",
+    "test:e2e": "set RUN_GATEWAY_E2E=true&& jest --runInBand --config jest.config.cjs ../test/backend/e2e"
   },
   "dependencies": {
     "cors": "^2.8.5",

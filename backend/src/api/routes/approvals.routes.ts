@@ -9,6 +9,7 @@ import {
   ManagedActionScope,
   ManagedActionType
 } from "../../services/policy/action-state";
+import { scheduleActionVerification } from "../../services/policy/action-verifier";
 
 const approveSchema = z.object({
   reviewer: z.string().default("approver"),
@@ -76,7 +77,7 @@ approvalsRouter.post(
         `INSERT INTO actions (
            incident_id, approval_id, action_type, scope, target, ttl_seconds,
            requested_by, executed_by, result, detail, rollback_token, executed_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'success', $9, $10, NOW())
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, NOW())
          RETURNING id, incident_id, action_type, scope, target, ttl_seconds, requested_by, executed_by, result, detail, rollback_token, created_at, executed_at`,
         [
           approval.incident_id,
@@ -121,6 +122,16 @@ approvalsRouter.post(
       } catch (error) {
         logger.error("failed to cache approved action state", error instanceof Error ? error.message : error);
       }
+
+      scheduleActionVerification({
+        action_id: actionResult.rows[0].id,
+        incident_id: actionResult.rows[0].incident_id,
+        action_type: actionResult.rows[0].action_type as ManagedActionType,
+        scope: actionResult.rows[0].scope as ManagedActionScope,
+        target: actionResult.rows[0].target,
+        actor: input.reviewer,
+        operation: "apply"
+      });
 
       res.json({ approval_id: approval.id, action: { ...actionResult.rows[0], redis_key: redisKey } });
     } catch (error) {
