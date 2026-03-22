@@ -48,6 +48,8 @@ waf-incident-platform/
 
 1. 复制后端环境变量模板：`copy backend\\.env.example backend\\.env`
 2. 启动依赖：`docker compose up -d postgres redis`
+   - 说明：为避免与本机 PostgreSQL 冲突，Compose 将 PostgreSQL 映射到宿主机 `55432` 端口。
+   - 本地运行后端时，请确保 `backend/.env` 中 `POSTGRES_PORT=55432`。
 3. 启动后端：
    - `cd backend`
    - `npm.cmd install`

@@ -8,7 +8,7 @@
       POSTGRES_USER: waf_user
       POSTGRES_PASSWORD: waf_password
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
