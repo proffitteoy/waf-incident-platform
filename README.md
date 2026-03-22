@@ -30,7 +30,7 @@
 
 ```text
 waf-incident-platform/
-|-- frontend/
+|-- frontends/
 |-- backend/
 |   |-- src/
 |   |-- tools/
@@ -46,14 +46,14 @@ waf-incident-platform/
 
 ## 快速启动
 
-1. 复制环境变量：`copy .env.example .env`
+1. 复制后端环境变量模板：`copy backend\\.env.example backend\\.env`
 2. 启动依赖：`docker compose up -d postgres redis`
 3. 启动后端：
    - `cd backend`
    - `npm.cmd install`
    - `npm.cmd run dev`
 4. 可选启动前端：
-   - `cd frontend`
+   - `cd frontends`
    - `npm.cmd install`
    - `npm.cmd run dev`
 

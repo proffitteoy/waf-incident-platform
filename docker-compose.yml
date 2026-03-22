@@ -36,12 +36,12 @@
       - ./storage/pcap:/app/storage/pcap
       - ./services/forensics-worker:/services/forensics-worker
     environment:
-      - PORT=3000
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=waf_user
-      - DB_PASSWORD=waf_password
-      - DB_NAME=waf_incident
+      - BACKEND_PORT=3000
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=waf_user
+      - POSTGRES_PASSWORD=waf_password
+      - POSTGRES_DB=waf_incident
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - BACKEND_API_URL=http://localhost:3000

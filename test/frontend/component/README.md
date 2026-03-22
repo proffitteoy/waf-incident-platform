@@ -7,4 +7,4 @@
 - 验证页面数据接入与渲染行为。
 
 ## 运行方式
-- `cd frontend && npm.cmd test`
+- `cd frontends && npm.cmd test`

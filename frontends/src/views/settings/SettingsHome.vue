@@ -12,6 +12,7 @@
           <template #header>
             <div class="card-header">
               <span>LLM 配置</span>
+              <el-tag size="small" type="info">{{ persistenceLabel }}</el-tag>
             </div>
           </template>
 
@@ -20,14 +21,21 @@
               <el-input
                 v-model="llm.apiKey"
                 type="password"
-                placeholder="仅前端示例，不会真实保存"
+                placeholder="留空则保持现有密钥不变"
+                @input="apiKeyTouched = true"
               />
+            </el-form-item>
+            <el-form-item label="当前密钥">
+              <el-tag size="small" :type="llm.hasApiKey ? 'success' : 'warning'">
+                {{ llm.hasApiKey ? llm.apiKeyMasked || '已配置' : '未配置' }}
+              </el-tag>
             </el-form-item>
             <el-form-item label="Base URL">
               <el-input v-model="llm.baseUrl" placeholder="https://llm.example.com/v1" />
             </el-form-item>
             <el-form-item label="模型">
-              <el-select v-model="llm.model" style="width: 260px">
+              <el-select v-model="llm.model" filterable allow-create default-first-option style="width: 260px">
+                <el-option label="waf-mvp-analyzer" value="waf-mvp-analyzer" />
                 <el-option label="sec-llm-1" value="sec-llm-1" />
                 <el-option label="gpt-4.5-secure" value="gpt-4.5-secure" />
               </el-select>
@@ -39,11 +47,17 @@
               <el-input-number v-model="llm.retries" :min="0" :max="10" />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="saveLlm">
+              <el-button type="primary" :loading="saving" @click="saveLlm">
                 保存 LLM 配置
+              </el-button>
+              <el-button :loading="loading" @click="loadLlmConfig">
+                刷新
               </el-button>
             </el-form-item>
           </el-form>
+          <p class="muted">
+            {{ lastUpdatedText }}
+          </p>
         </el-card>
       </el-col>
 
@@ -79,20 +93,91 @@
 </template>
 
 <script setup>
-import { reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { SettingsApi } from '../../api/settings'
 
 const llm = reactive({
   apiKey: '',
-  baseUrl: 'https://llm.example.com/v1',
-  model: 'sec-llm-1',
+  baseUrl: '',
+  model: 'waf-mvp-analyzer',
   timeout: 30,
-  retries: 3,
+  retries: 2,
+  hasApiKey: false,
+  apiKeyMasked: null,
+  updatedAt: null,
+  persistence: 'memory',
 })
 
-function saveLlm() {
-  ElMessage.success('LLM 配置已保存（假数据）')
+const loading = ref(false)
+const saving = ref(false)
+const apiKeyTouched = ref(false)
+
+const persistenceLabel = computed(() => {
+  return llm.persistence === 'memory' ? '运行时配置（重启失效）' : '持久化配置'
+})
+
+const lastUpdatedText = computed(() => {
+  if (!llm.updatedAt) {
+    return '尚未检测到配置更新时间'
+  }
+  return `最近更新：${new Date(llm.updatedAt).toLocaleString()}`
+})
+
+function applyLlmConfig(config) {
+  llm.baseUrl = config.baseUrl || ''
+  llm.model = config.model || 'waf-mvp-analyzer'
+  llm.timeout = Math.max(1, Math.round((config.timeoutMs || 15000) / 1000))
+  llm.retries = Number.isInteger(config.retries) ? config.retries : 2
+  llm.hasApiKey = Boolean(config.hasApiKey)
+  llm.apiKeyMasked = config.apiKeyMasked || null
+  llm.updatedAt = config.updatedAt || null
+  llm.persistence = config.persistence || 'memory'
 }
+
+async function loadLlmConfig() {
+  loading.value = true
+  try {
+    const result = await SettingsApi.getLlm()
+    applyLlmConfig(result?.llm || {})
+    llm.apiKey = ''
+    apiKeyTouched.value = false
+  } catch (error) {
+    ElMessage.error(`读取 LLM 配置失败：${error?.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveLlm() {
+  saving.value = true
+  try {
+    const payload = {
+      baseUrl: llm.baseUrl.trim() || null,
+      model: llm.model.trim(),
+      timeoutMs: llm.timeout * 1000,
+      retries: llm.retries,
+    }
+
+    if (apiKeyTouched.value) {
+      payload.apiKey = llm.apiKey
+    }
+
+    const result = await SettingsApi.updateLlm(payload)
+    applyLlmConfig(result?.llm || {})
+    llm.apiKey = ''
+    apiKeyTouched.value = false
+    ElMessage.success('LLM 配置已保存')
+  } catch (error) {
+    ElMessage.error(`保存 LLM 配置失败：${error?.message || '未知错误'}`)
+  } finally {
+    saving.value = false
+  }
+}
+
+onMounted(() => {
+  void loadLlmConfig()
+})
 </script>
 
 <style scoped>

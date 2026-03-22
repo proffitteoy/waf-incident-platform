@@ -6,6 +6,7 @@
 - 分析：`llm-reports.routes.ts`、`mcp.routes.ts`
 - 执行闭环：`actions.routes.ts`、`approvals.routes.ts`、`forensics.routes.ts`
 - 基础配置：`assets.routes.ts`、`policies.routes.ts`
+- 系统设置：`settings.routes.ts`（LLM 配置读写）
 - 采集：`ingestion.routes.ts`
 - 观测：`dashboard.routes.ts`
 
@@ -21,6 +22,7 @@
 - `POST /incidents/:id/actions/request-approval`，`POST /approvals/:id/approve|reject`
 - `POST /incidents/:id/forensics/capture`
 - `GET /dashboard/overview|timeseries`
+- `GET /settings/llm`，`PUT /settings/llm`
 - `GET /mcp/tools`，`POST /mcp/invoke`
 
 ## 关键导出

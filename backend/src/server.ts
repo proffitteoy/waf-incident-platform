@@ -3,9 +3,11 @@ import { env } from "./core/config/env";
 import { closeRedis, connectRedis } from "./core/cache/redis";
 import { pool } from "./core/db/pool";
 import { logger } from "./core/logger";
+import { loadLlmSettingsOnStartup } from "./services/llm/llm-settings.service";
 import { startActionWatchdog, stopActionWatchdog } from "./services/policy/action-watchdog";
 
 const bootstrap = async () => {
+  await loadLlmSettingsOnStartup();
   await connectRedis();
   startActionWatchdog();
 
