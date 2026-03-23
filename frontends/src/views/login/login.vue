@@ -28,7 +28,7 @@
       <!-- Login Form Side -->
       <div class="content-right" :class="{ 'fade-in': showForm }">
         <div class="login-box">
-          <h2 class="form-title">{{ isLoginMode ? '登录控制台' : '注册新帐号' }}</h2>
+          <h2 class="form-title">登录控制台</h2>
 
           <el-form
             ref="loginRef"
@@ -36,10 +36,10 @@
             :rules="loginRules"
             class="custom-form"
           >
-            <el-form-item prop="user_account">
+            <el-form-item prop="username">
               <el-input
-                v-model="loginForm.user_account"
-                :placeholder="isLoginMode ? '账号（例如 admin）' : '设置登录账号'"
+                v-model="loginForm.username"
+                placeholder="账号（例如 admin）"
                 class="modern-input"
               />
             </el-form-item>
@@ -48,19 +48,9 @@
               <el-input
                 v-model="loginForm.password"
                 type="password"
-                :placeholder="isLoginMode ? '密码' : '设置登录密码（至少 6 位）'"
+                placeholder="密码"
                 class="modern-input"
                 show-password
-              />
-            </el-form-item>
-
-            <!-- 验证码 - 仅在注册模式下显示 -->
-            <el-form-item v-if="!isLoginMode" prop="captcha" class="captcha-form-item">
-              <Captcha
-                v-model="loginForm.captcha"
-                @verify="handleCaptchaVerify"
-                ref="captchaRef"
-                placeholder="请输入验证码"
               />
             </el-form-item>
 
@@ -70,16 +60,13 @@
                 class="btn-submit"
                 @click="handleSubmit"
               >
-                {{ isLoginMode ? '登录' : '注册' }}
+                登录
               </el-button>
             </div>
           </el-form>
 
           <div class="form-footer">
-            <el-checkbox v-if="isLoginMode" v-model="rememberMe" class="modern-checkbox">记住我</el-checkbox>
-            <button class="switch-mode-btn" @click="toggleMode">
-              {{ isLoginMode ? "还没有账号？去注册" : "已经有账号？去登录" }}
-            </button>
+            <el-checkbox v-model="rememberMe" class="modern-checkbox">记住我</el-checkbox>
           </div>
         </div>
       </div>
@@ -91,171 +78,66 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, nextTick } from 'vue'
+import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { UserApi } from "../../api/user.js"
 import { ElMessage } from 'element-plus'
-import Captcha from '../../components/Captcha.vue'
 
 const router = useRouter()
 const loginRef = ref()
-const captchaRef = ref()
 const rememberMe = ref(false)
-const isLoginMode = ref(true)
-const showForm = ref(true) // Default to show form for login page
-const captchaValid = ref(false)
+const showForm = ref(true)
 
 const loginForm = reactive({
-  user_account: '',
+  username: '',
   password: '',
-  captcha: '',
 })
 
 const loginRules = reactive({
-  user_account: [
+  username: [
     { required: true, message: '请输入登录账号', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '密码至少 6 位', trigger: 'blur' },
   ],
-  captcha: [
-    { required: true, message: '请输入验证码', trigger: 'blur' }
-  ]
 })
-
-const toggleMode = async () => {
-  isLoginMode.value = !isLoginMode.value
-  loginForm.user_account = ''
-  loginForm.password = ''
-  loginForm.captcha = ''
-  captchaValid.value = false
-  if (loginRef.value) {
-    loginRef.value.clearValidate()
-  }
-  // 切换到注册模式时，等待DOM更新后刷新验证码
-  if (!isLoginMode.value) {
-    await nextTick()
-    if (captchaRef.value) {
-      captchaRef.value.refresh()
-    }
-  }
-}
-
-// 处理验证码验证
-const handleCaptchaVerify = (isValid) => {
-  captchaValid.value = isValid
-  // 如果验证失败，清除验证码字段的错误提示（因为我们在提交时验证）
-  if (isValid && loginRef.value) {
-    loginRef.value.clearValidate('captcha')
-  }
-}
 
 const handleSubmit = async () => {
   if (!loginRef.value) return
-
-  // 先进行表单基础验证
   loginRef.value.validate(async (valid) => {
     if (!valid) {
       ElMessage.error("请正确填写登录信息")
       return
     }
-
-    // 如果是注册模式，验证验证码
-    if (!isLoginMode.value) {
-      if (!loginForm.captcha) {
-        ElMessage.error("请输入验证码")
-        return
-      }
-      if (!captchaValid.value) {
-        ElMessage.error("验证码不正确，请重试")
-        if (captchaRef.value) {
-          captchaRef.value.refresh()
-          loginForm.captcha = ''
-          captchaValid.value = false
-        }
-        return
-      }
-    }
-
-    // 验证通过，执行登录或注册
-    if (isLoginMode.value) {
-      await handleLogin()
-    } else {
-      await handleRegister()
-    }
+    await handleLogin()
   })
 }
 
 const handleLogin = async () => {
   try {
     const res = await UserApi.login(loginForm)
-    if (res.success) {
-      ElMessage.success(res.message || '登录成功')
-      // 存储token
-      if (res.data.token) {
-        sessionStorage.setItem('token', res.data.token)
-      }
-      // 存储用户信息
-      if (res.data.user) {
-        sessionStorage.setItem('role', res.data.user.role)
-        sessionStorage.setItem('id', res.data.user.id)
-        sessionStorage.setItem('nickName', res.data.user.nickName)
-        sessionStorage.setItem('avatar', res.data.user.avatar)
-        sessionStorage.setItem('userAccount', res.data.user.userAccount)
-      }
+    ElMessage.success('登录成功')
 
-      if (res.data.user && res.data.user.role === 'admin') {
-        await router.push('/admin')
-      } else if (res.data.user && res.data.user.role === 'user') {
-        await router.push('/user')
-      } else {
-        ElMessage.error("用户角色无效")
-      }
+    if (res.token) {
+      sessionStorage.setItem('token', res.token)
+    }
+    if (res.user) {
+      sessionStorage.setItem('role', res.user.role)
+      sessionStorage.setItem('id', res.user.id)
+      sessionStorage.setItem('username', res.user.username)
+    }
+
+    if (res.user?.role === 'admin') {
+      await router.push('/admin')
+    } else if (res.user?.role === 'user') {
+      await router.push('/user')
     } else {
-      ElMessage.error(res.message || "登录失败")
+      ElMessage.error("用户角色无效")
     }
   } catch (error) {
     console.error("Login error:", error)
-    ElMessage.error("登录异常，请稍后重试")
-  }
-}
-
-const handleRegister = async () => {
-  // 验证验证码
-  if (!captchaValid.value) {
-    ElMessage.error("Please enter the correct verification code")
-    if (captchaRef.value) {
-      captchaRef.value.refresh()
-      loginForm.captcha = ''
-    }
-    return
-  }
-
-  try {
-    const res = await UserApi.register(loginForm)
-    if (res.success) {
-      ElMessage.success("注册成功，请使用新账号登录")
-      // 注册成功后切换到登录模式
-      toggleMode()
-    } else {
-      ElMessage.error(res.message || "注册失败")
-      // 注册失败后刷新验证码
-      if (captchaRef.value) {
-        captchaRef.value.refresh()
-        loginForm.captcha = ''
-        captchaValid.value = false
-      }
-    }
-  } catch (error) {
-    console.error("Registration error:", error)
-    ElMessage.error("注册异常，请稍后重试")
-    // 出错后刷新验证码
-    if (captchaRef.value) {
-      captchaRef.value.refresh()
-      loginForm.captcha = ''
-      captchaValid.value = false
-    }
+    ElMessage.error(error?.message || "登录失败，请检查账号密码")
   }
 }
 </script>

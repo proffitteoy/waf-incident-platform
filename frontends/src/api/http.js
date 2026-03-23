@@ -22,10 +22,14 @@ export async function request(path, options = {}) {
   const { query, ...rest } = options
   const url = buildUrl(path, query)
 
+  const token = sessionStorage.getItem('token')
+  const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+
   const res = await fetch(url, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeader,
       ...(rest.headers || {}),
     },
     ...rest,
