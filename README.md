@@ -44,6 +44,53 @@ waf-incident-platform/
 `-- storage/
 ```
 
+## 前置依赖条件
+
+### 本地开发模式（backend/frontend 在宿主机运行）
+
+必需条件：
+
+1. Windows PowerShell 5.1+（用于执行 scripts 目录下脚本）。
+2. Node.js 20+ 与 npm（用于运行 backend 与 frontends）。
+3. Docker Desktop 已运行（用于启动 postgres 与 redis 依赖容器）。
+4. 已准备 backend/.env（可由 backend/.env.example 复制）。
+
+端口要求：
+
+1. 3000（后端 API）。
+2. 5173（前端 Vite）。
+3. 55432（PostgreSQL 宿主机映射端口）。
+4. 6379（Redis）。
+
+建议先检查：
+
+- powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\check-preflight.ps1
+
+### Docker 部署模式（全容器）
+
+必需条件：
+
+1. Windows PowerShell 5.1+（用于执行 scripts 目录下脚本）。
+2. Docker Desktop 已运行，且支持 docker compose。
+3. 已准备 backend/.env（可由 backend/.env.example 复制）。
+
+端口要求：
+
+1. 80（WAF 网关入口）。
+2. 5173（前端）。
+3. 3000（后端 API，便于联调直连）。
+4. 55432（PostgreSQL 映射）。
+5. 6379（Redis）。
+
+建议先检查：
+
+- powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\check-preflight.ps1
+
+说明：
+
+- 本地开发模式建议仅启动 postgres 与 redis 容器，再在宿主机启动 backend/frontend。
+- Docker 部署模式会同时启动 frontend/backend/waf/forensics-worker，前端代理目标为容器内 backend:3000。
+
 ## 快速启动（本地开发）
 
 1. 复制后端环境变量模板：`copy backend\\.env.example backend\\.env`
