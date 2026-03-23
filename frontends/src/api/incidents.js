@@ -9,40 +9,42 @@ export const IncidentsApi = {
     return request(`/incidents/${id}`)
   },
 
-  triggerAnalyze(id) {
-    return request(`/incidents/${id}/analyze`, { method: 'POST' })
-  },
-
-  analyzeBatch(payload) {
-    return request('/incidents/analyze-batch', {
+  analyzeEvents(payload) {
+    return request('/incidents/analyze-events', {
       method: 'POST',
-      body: JSON.stringify(payload),
-    })
-  },
-
-  updateStatus(id, payload) {
-    return request(`/incidents/${id}/status`, {
-      method: 'PATCH',
       body: JSON.stringify(payload),
     })
   },
 
   addComment(id, payload) {
-    return request(`/incidents/${id}/comments`, {
+    return request(`/incidents/${id}/comment`, {
       method: 'POST',
       body: JSON.stringify(payload),
     })
   },
 
-  getComments(id) {
-    return request(`/incidents/${id}/comments`)
+  executeAction(id, payload) {
+    return request(`/incidents/${id}/actions/execute`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
   },
 
-  createAction(id, payload) {
-    return request(`/incidents/${id}/actions`, {
+  requestApproval(id, payload) {
+    return request(`/incidents/${id}/actions/request-approval`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  getLlmReports(id) {
+    return request(`/incidents/${id}/llm-reports`)
+  },
+
+  createLlmReport(id, payload) {
+    return request(`/incidents/${id}/llm-reports`, {
       method: 'POST',
       body: JSON.stringify(payload),
     })
   },
 }
-
