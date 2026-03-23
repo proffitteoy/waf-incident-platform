@@ -66,10 +66,11 @@ waf-incident-platform/
 需要在包含 docker-compose.yml目录下运行
 1. 复制后端环境变量模板：`copy backend\\.env.example backend\\.env`
 2. 建议先做启动前检查：`powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\check-preflight.ps1`
-3. 全量启动（含构建）：`docker compose up -d --build`
+3. 全量启动（含构建，首次或变更镜像使用）：`docker compose up -d --build`
 4. 查看服务状态：`docker compose ps`
 5. 查看后端日志（可选）：`docker compose logs -f backend`
-6.首次成功后，日常启动不要每次都带 --build
+
+6.首次成功后，日常启动不要每次都带 --build，
 用 docker compose up -d
 
 访问入口：
