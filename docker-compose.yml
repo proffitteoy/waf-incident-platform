@@ -8,7 +8,7 @@
       POSTGRES_USER: waf_user
       POSTGRES_PASSWORD: waf_password
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
@@ -36,12 +36,12 @@
       - ./storage/pcap:/app/storage/pcap
       - ./services/forensics-worker:/services/forensics-worker
     environment:
-      - PORT=3000
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=waf_user
-      - DB_PASSWORD=waf_password
-      - DB_NAME=waf_incident
+      - BACKEND_PORT=3000
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=waf_user
+      - POSTGRES_PASSWORD=waf_password
+      - POSTGRES_DB=waf_incident
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - BACKEND_API_URL=http://localhost:3000
@@ -49,7 +49,7 @@
       - FORENSICS_DOWNLOAD_TOKEN_REQUIRED=false
       - FORENSICS_DOWNLOAD_SIGNING_SECRET=change-this-forensics-secret
       - FORENSICS_DOWNLOAD_URL_TTL_SECONDS=300
-    command: sh -c "apk add --no-cache python3 tshark && if [ ! -d node_modules ]; then npm install; fi && npm run dev"
+    command: sh -c "apk add --no-cache python3 tshark && if [ ! -x node_modules/.bin/ts-node-dev ]; then npm install; fi && npm run dev"
     depends_on:
       - postgres
       - redis
@@ -66,7 +66,9 @@
     volumes:
       - ./frontends:/app
       - /app/node_modules
-    command: sh -c "if [ ! -d node_modules ]; then npm install; fi && npm run dev -- --host"
+    command: sh -c "if [ ! -x node_modules/.bin/vite ]; then npm install; fi && npm run dev -- --host"
+    environment:
+      - VITE_API_PROXY_TARGET=http://backend:3000
     ports:
       - "5173:5173"
     networks:

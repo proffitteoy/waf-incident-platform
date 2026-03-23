@@ -40,7 +40,7 @@ RUN wget https://openresty.org/download/openresty-1.25.3.1.tar.gz \
     && git clone --depth 1 -b ${MODSECURITY_NGINX_VERSION} https://github.com/SpiderLabs/ModSecurity-nginx \
     && cd openresty-1.25.3.1 \
     && ./configure --with-compat --add-dynamic-module=../ModSecurity-nginx \
-    && make modules \
+    && gmake \
     && mkdir -p /usr/local/openresty/nginx/modules \
     && cp build/nginx-*/objs/ngx_http_modsecurity_module.so /usr/local/openresty/nginx/modules/
 
@@ -52,7 +52,7 @@ RUN apk add --no-cache \
     yajl \
     libstdc++ \
     libxml2 \
-    libgeoip \
+    geoip \
     curl
 
 # 创建必要的目录

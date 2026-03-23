@@ -12,6 +12,7 @@ import { incidentsRouter } from "./routes/incidents.routes";
 import { llmReportsRouter } from "./routes/llm-reports.routes";
 import { mcpRouter } from "./routes/mcp.routes";
 import { policiesRouter } from "./routes/policies.routes";
+import { settingsRouter } from "./routes/settings.routes";
 
 export const apiRouter = Router();
 
@@ -28,3 +29,4 @@ apiRouter.use("/assets", assetsRouter);
 apiRouter.use("/mcp", mcpRouter);
 apiRouter.use(forensicsRouter);
 apiRouter.use("/incidents", llmReportsRouter);
+apiRouter.use("/settings", settingsRouter);

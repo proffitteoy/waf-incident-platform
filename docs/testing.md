@@ -74,7 +74,7 @@ npm.cmd run test:workflow
 ```
 
 ```bash
-cd frontend
+cd frontends
 npm.cmd test
 ```
 
