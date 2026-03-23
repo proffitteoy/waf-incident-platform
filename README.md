@@ -44,7 +44,7 @@ waf-incident-platform/
 `-- storage/
 ```
 
-## 快速启动
+## 快速启动（本地开发）
 
 1. 复制后端环境变量模板：`copy backend\\.env.example backend\\.env`
 2. 启动依赖：`docker compose up -d postgres redis`
@@ -58,6 +58,28 @@ waf-incident-platform/
    - `cd frontends`
    - `npm.cmd install`
    - `npm.cmd run dev`
+
+## Docker Compose 部署（全容器）
+
+适用于联调、演示或验收环境，一条命令启动完整服务栈（postgres/redis/backend/frontend/waf/forensics-worker）。
+
+需要在包含 docker-compose.yml目录下运行
+1. 复制后端环境变量模板：`copy backend\\.env.example backend\\.env`
+2. 建议先做启动前检查：`powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\check-preflight.ps1`
+3. 全量启动（含构建）：`docker compose up -d --build`
+4. 查看服务状态：`docker compose ps`
+5. 查看后端日志（可选）：`docker compose logs -f backend`
+6.首次成功后，日常启动不要每次都带 --build
+用 docker compose up -d
+
+访问入口：
+- 前端：http://localhost:5173
+- 后端 API：http://localhost:3000
+- WAF 网关：http://localhost:80
+
+停止与清理：
+- 停止容器：`docker compose down`
+- 停止并删除数据卷：`docker compose down -v`
 
 ## 日志回放与测试
 
