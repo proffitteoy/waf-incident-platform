@@ -81,11 +81,12 @@
       dockerfile: Dockerfile
     container_name: waf-gateway
     restart: always
+    env_file:
+      - ./backend/.env
     ports:
       - "80:80"
     environment:
-      # 目标网站地址
-      - WEBSITE_URL=http://host.docker.internal:8080
+      # 目标网站地址由 ./backend/.env 的 WEBSITE_URL 提供
       # Redis 连接配置 (供 Lua 脚本使用)
       - REDIS_HOST=redis
       - REDIS_PORT=6379
