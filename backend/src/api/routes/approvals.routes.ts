@@ -24,6 +24,21 @@ const rejectSchema = z.object({
 export const approvalsRouter = Router();
 
 approvalsRouter.get(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const result = await query(
+      `SELECT id, incident_id, action_draft, risk_level, status, requested_by, reviewed_by, reviewed_at, comment, created_at
+       FROM approvals WHERE id = $1 LIMIT 1`,
+      [req.params.id]
+    );
+    if (result.rowCount === 0) {
+      throw new HttpError(404, "approval not found");
+    }
+    res.json(result.rows[0]);
+  })
+);
+
+approvalsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const status = (req.query.status as string | undefined) ?? "pending";
@@ -140,6 +155,20 @@ approvalsRouter.post(
     } finally {
       client.release();
     }
+  })
+);
+
+approvalsRouter.delete(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const result = await query(
+      `DELETE FROM approvals WHERE id = $1 RETURNING id`,
+      [req.params.id]
+    );
+    if (result.rowCount === 0) {
+      throw new HttpError(404, "approval not found");
+    }
+    res.json({ deleted: true });
   })
 );
 

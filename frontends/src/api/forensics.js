@@ -1,6 +1,10 @@
 import { request } from './http'
 
 export const ForensicsApi = {
+  list(params) {
+    return request('/forensics', { query: params })
+  },
+
   listByIncident(incidentId, params) {
     return request(`/incidents/${incidentId}/forensics`, { query: params })
   },

@@ -1,5 +1,4 @@
-import {createRouter,createWebHistory,createWebHashHistory} from "vue-router";
-import {ElMessage} from "element-plus";
+import {createRouter,createWebHistory} from "vue-router";
 
 
 // 路由表
@@ -9,14 +8,8 @@ const routes = [
     redirect: '/dashboard',
   },
   {
-    path: '/login',
-    name: 'login',
-    component: () => import('../views/login/login.vue'),
-  },
-  {
     path: '/',
     component: () => import('../layouts/MainLayout.vue'),
-    meta: { requireAuth: true },
     children: [
       {
         path: '/dashboard',
@@ -52,13 +45,13 @@ const routes = [
         path: '/approvals',
         name: 'approvals',
         component: () => import('../views/approvals/ApprovalsList.vue'),
-        meta: { title: '审批列表', role: ['admin'] },
+        meta: { title: '审批列表' },
       },
       {
         path: '/approvals/:id',
         name: 'approval-detail',
         component: () => import('../views/approvals/ApprovalDetail.vue'),
-        meta: { title: '审批详情', role: ['admin'] },
+        meta: { title: '审批详情' },
       },
       {
         path: '/actions',
@@ -76,19 +69,31 @@ const routes = [
         path: '/policies',
         name: 'policies',
         component: () => import('../views/policies/PoliciesList.vue'),
-        meta: { title: '策略列表', role: ['admin'] },
+        meta: { title: '策略列表' },
       },
       {
         path: '/policies/:id/edit',
         name: 'policy-edit',
         component: () => import('../views/policies/PolicyEdit.vue'),
-        meta: { title: '编辑策略', role: ['admin'] },
+        meta: { title: '编辑策略' },
       },
       {
         path: '/policies/new',
         name: 'policy-new',
         component: () => import('../views/policies/PolicyEdit.vue'),
-        meta: { title: '新增策略', role: ['admin'] },
+        meta: { title: '新增策略' },
+      },
+      {
+        path: '/policies/ip-whitelist',
+        name: 'ip-whitelist',
+        component: () => import('../views/policies/IpWhitelist.vue'),
+        meta: { title: 'IP 白名单策略' },
+      },
+      {
+        path: '/policies/geo-block',
+        name: 'geo-block',
+        component: () => import('../views/policies/GeoBlock.vue'),
+        meta: { title: '地区封禁策略' },
       },
       {
         path: '/forensics',
@@ -112,19 +117,13 @@ const routes = [
         path: '/settings',
         name: 'settings',
         component: () => import('../views/settings/SettingsHome.vue'),
-        meta: { title: '系统设置', role: ['admin'] },
+        meta: { title: '系统设置' },
       },
       {
         path: '/settings/ingestion',
         name: 'settings-ingestion',
         component: () => import('../views/settings/IngestionSettings.vue'),
-        meta: { title: '日志采集配置', role: ['admin'] },
-      },
-      {
-        path: '/admin/permissions',
-        name: 'admin-permissions',
-        component: () => import('../views/admin/Permissions.vue'),
-        meta: { title: '权限管理', role: ['admin'] },
+        meta: { title: '日志采集配置' },
       },
     ],
   },
@@ -136,37 +135,5 @@ const  router=createRouter({
     routes,
 })
 
-// 路由守卫（暂时关闭登录拦截，后续需要鉴权时再开启）
-// router.beforeEach((to, from, next) => {
-//   // 检查路由是否需要认证
-//   if (to.meta.requireAuth) {
-//     const role = sessionStorage.getItem('role')
-//
-//     // 用户未登录
-//     if (!role) {
-//       ElMessage.error('请先登录')
-//       next('/login')
-//       return
-//     }
-//
-//     // 检查用户角色是否匹配路由要求的角色
-//     if (to.meta.role && !to.meta.role.includes(role)) {
-//       // 普通用户尝试访问管理员页面
-//       if (to.path.startsWith('/admin')) {
-//         ElMessage.error('无权限访问管理员页面！')
-//         // 重定向到用户首页
-//         next('/user/home')
-//       } else {
-//         ElMessage.error('无权限访问！')
-//         // 重定向到上一个页面或用户首页
-//         next(from.path || '/user/home')
-//       }
-//       return
-//     }
-//   }
-//
-//   // 允许访问
-//   next()
-// })
 //导出路由
 export default router;

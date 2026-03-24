@@ -16,6 +16,22 @@ const updatePolicySchema = z.object({
 export const policiesRouter = Router();
 
 policiesRouter.get(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const result = await query(
+      `SELECT id, asset_id, name, risk_threshold_low, risk_threshold_high, low_risk_actions,
+              high_risk_actions, default_ttl_seconds, is_active, version, created_at, updated_at
+       FROM policies WHERE id = $1 LIMIT 1`,
+      [req.params.id]
+    );
+    if (result.rowCount === 0) {
+      throw new HttpError(404, "policy not found");
+    }
+    res.json(result.rows[0]);
+  })
+);
+
+policiesRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
     const result = await query(

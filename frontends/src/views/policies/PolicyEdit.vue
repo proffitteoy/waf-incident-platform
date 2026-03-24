@@ -1,224 +1,232 @@
 <template>
   <div class="page-wrapper">
     <header class="page-header">
-      <h2>{{ isNew ? '新建策略' : '编辑策略 ' + route.params.id }}</h2>
-      <p>配置策略基本信息、风险阈值和自动动作规则（当前为假数据表单）。</p>
+      <h2>编辑策略 {{ form.name || route.params.id }}</h2>
+      <p>修改策略的风险阈值、动作规则和启用状态。</p>
     </header>
 
-    <el-form
-      ref="formRef"
-      :model="form"
-      :rules="rules"
-      label-width="120px"
-      class="policy-form"
+    <el-skeleton v-if="isLoading" animated :rows="6" />
+
+    <el-result
+      v-else-if="loadError"
+      icon="error"
+      title="策略加载失败"
+      :sub-title="loadError"
     >
+      <template #extra>
+        <el-button type="primary" @click="loadPolicy">重试</el-button>
+      </template>
+    </el-result>
+
+    <el-form v-else ref="formRef" :model="form" :rules="rules" label-width="140px" class="policy-form">
       <el-card shadow="never" class="card-block">
         <template #header>
-          <div class="card-header">
-            <span>策略基本信息</span>
-          </div>
+          <div class="card-header"><span>策略基本信息</span></div>
         </template>
-
-        <el-form-item label="策略名称" prop="name">
-          <el-input v-model="form.name" placeholder="例如：默认 Web 防护策略" />
+        <el-form-item label="策略名称">
+          <span>{{ form.name }}</span>
+          <span class="muted" style="margin-left: 8px">（策略名称不可修改）</span>
         </el-form-item>
-        <el-form-item label="策略描述">
-          <el-input
-            v-model="form.description"
-            type="textarea"
-            :rows="3"
-            placeholder="简要说明策略用途、适用范围和注意事项。"
-          />
-        </el-form-item>
-        <el-form-item label="策略类型" prop="type">
-          <el-select v-model="form.type" placeholder="请选择类型" style="width: 240px">
-            <el-option label="WAF" value="WAF" />
-            <el-option label="Auth" value="Auth" />
-            <el-option label="Admin API" value="Admin API" />
-          </el-select>
+        <el-form-item label="启用状态">
+          <el-switch v-model="form.is_active" active-text="已启用" inactive-text="未启用" />
         </el-form-item>
       </el-card>
 
       <el-card shadow="never" class="card-block">
         <template #header>
-          <div class="card-header">
-            <span>风险等级阈值</span>
-          </div>
+          <div class="card-header"><span>风险阈值</span></div>
         </template>
-
-        <el-row :gutter="16">
-          <el-col :span="8">
-            <el-form-item label="低风险阈值" prop="thresholds.low">
-              <el-input-number v-model="form.thresholds.low" :min="0" :max="100" />
+        <el-row :gutter="24">
+          <el-col :span="12">
+            <el-form-item label="低风险阈值" prop="risk_threshold_low">
+              <el-input-number v-model="form.risk_threshold_low" :min="0" :max="form.risk_threshold_high - 1" style="width: 180px" />
+              <span class="muted" style="margin-left: 8px">分值低于此阈值视为低风险</span>
             </el-form-item>
           </el-col>
-          <el-col :span="8">
-            <el-form-item label="中风险阈值" prop="thresholds.medium">
-              <el-input-number v-model="form.thresholds.medium" :min="0" :max="100" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="高风险阈值" prop="thresholds.high">
-              <el-input-number v-model="form.thresholds.high" :min="0" :max="100" />
+          <el-col :span="12">
+            <el-form-item label="高风险阈值" prop="risk_threshold_high">
+              <el-input-number v-model="form.risk_threshold_high" :min="form.risk_threshold_low + 1" style="width: 180px" />
+              <span class="muted" style="margin-left: 8px">分值高于此阈值视为高风险</span>
             </el-form-item>
           </el-col>
         </el-row>
-        <p class="muted">
-          阈值仅在前端演示使用，后续会通过 `/api/policies` 落库，与 LLM 风险分值等打通。
-        </p>
+        <el-form-item label="默认 TTL（秒）" prop="default_ttl_seconds">
+          <el-input-number v-model="form.default_ttl_seconds" :min="60" style="width: 180px" />
+          <span class="muted" style="margin-left: 8px">动作的默认有效时长</span>
+        </el-form-item>
       </el-card>
 
       <el-card shadow="never" class="card-block">
         <template #header>
-          <div class="card-header">
-            <span>动作规则配置</span>
-          </div>
+          <div class="card-header"><span>动作规则</span></div>
         </template>
-
-        <el-table :data="form.actionMappings" border size="small">
-          <el-table-column prop="riskLevel" label="风险等级" width="100" />
-          <el-table-column label="动作类型" min-width="180">
-            <template #default="{ row }">
-              <el-select v-model="row.action" style="width: 180px">
-                <el-option label="仅告警" value="alert" />
-                <el-option label="封禁 IP" value="block-ip" />
-                <el-option label="限流" value="rate-limit" />
-                <el-option label="修改规则" value="update-rule" />
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column label="是否需要审批" width="140">
-            <template #default="{ row }">
-              <el-switch v-model="row.requireApproval" />
-            </template>
-          </el-table-column>
-          <el-table-column label="说明" min-width="200">
-            <template #default="{ row }">
-              <el-input v-model="row.comment" placeholder="例如：高风险必须走审批" />
-            </template>
-          </el-table-column>
-        </el-table>
+        <el-form-item label="低风险动作" prop="low_risk_actions">
+          <div class="tag-input">
+            <el-tag
+              v-for="(action, idx) in form.low_risk_actions"
+              :key="idx"
+              closable
+              @close="removeAction('low', idx)"
+            >
+              {{ action }}
+            </el-tag>
+            <el-select
+              v-model="newLowAction"
+              placeholder="添加动作"
+              style="width: 140px"
+              @change="addAction('low')"
+            >
+              <el-option v-for="opt in actionOptions" :key="opt" :label="opt" :value="opt" />
+            </el-select>
+          </div>
+        </el-form-item>
+        <el-form-item label="高风险动作" prop="high_risk_actions">
+          <div class="tag-input">
+            <el-tag
+              v-for="(action, idx) in form.high_risk_actions"
+              :key="idx"
+              closable
+              @close="removeAction('high', idx)"
+            >
+              {{ action }}
+            </el-tag>
+            <el-select
+              v-model="newHighAction"
+              placeholder="添加动作"
+              style="width: 140px"
+              @change="addAction('high')"
+            >
+              <el-option v-for="opt in actionOptions" :key="opt" :label="opt" :value="opt" />
+            </el-select>
+          </div>
+        </el-form-item>
       </el-card>
 
       <div class="form-actions">
-        <el-button type="primary" @click="handleSubmit">
-          保存
-        </el-button>
-        <el-button @click="goBack">
-          取消
-        </el-button>
-        <span class="muted">
-          表单数据当前只保存在前端内存中，方便联调 API 时直接接入。
-        </span>
+        <el-button type="primary" :loading="submitting" @click="handleSubmit">保存</el-button>
+        <el-button @click="goBack">取消</el-button>
       </div>
     </el-form>
   </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { PoliciesApi } from '../../api/policies'
 
 const route = useRoute()
 const router = useRouter()
-
-const isNew = computed(() => route.name === 'policy-new')
+const policyId = String(route.params.id || '')
 
 const formRef = ref()
+const isLoading = ref(true)
+const loadError = ref('')
+const submitting = ref(false)
+const newLowAction = ref('')
+const newHighAction = ref('')
+
+const actionOptions = ['rate_limit', 'block', 'challenge']
 
 const form = reactive({
-  name: isNew.value ? '' : '默认 Web 防护策略',
-  description: isNew.value ? '' : '示例：用于保护 Web 入口免受常见攻击。',
-  type: isNew.value ? '' : 'WAF',
-  thresholds: {
-    low: 10,
-    medium: 30,
-    high: 70,
-  },
-  actionMappings: [
-    {
-      riskLevel: '低',
-      action: 'alert',
-      requireApproval: false,
-      comment: '仅记录日志并提示。',
-    },
-    {
-      riskLevel: '中',
-      action: 'rate-limit',
-      requireApproval: true,
-      comment: '限流 + 审批后执行进一步动作。',
-    },
-    {
-      riskLevel: '高',
-      action: 'block-ip',
-      requireApproval: true,
-      comment: '封禁 IP 或更新规则前须审批。',
-    },
-  ],
+  name: '',
+  risk_threshold_low: 20,
+  risk_threshold_high: 60,
+  low_risk_actions: [],
+  high_risk_actions: [],
+  default_ttl_seconds: 1800,
+  is_active: true,
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入策略名称', trigger: 'blur' }],
-  type: [{ required: true, message: '请选择策略类型', trigger: 'change' }],
+  risk_threshold_low: [{ required: true, type: 'number', message: '请输入低风险阈值', trigger: 'blur' }],
+  risk_threshold_high: [{ required: true, type: 'number', message: '请输入高风险阈值', trigger: 'blur' }],
+  default_ttl_seconds: [{ required: true, type: 'number', message: '请输入 TTL', trigger: 'blur' }],
 }
 
-function handleSubmit() {
+function addAction(level) {
+  const val = level === 'low' ? newLowAction.value : newHighAction.value
+  if (!val) return
+  const arr = level === 'low' ? form.low_risk_actions : form.high_risk_actions
+  if (!arr.includes(val)) arr.push(val)
+  if (level === 'low') newLowAction.value = ''
+  else newHighAction.value = ''
+}
+
+function removeAction(level, idx) {
+  const arr = level === 'low' ? form.low_risk_actions : form.high_risk_actions
+  arr.splice(idx, 1)
+}
+
+async function loadPolicy() {
+  if (!policyId) {
+    loadError.value = '缺少策略 ID'
+    isLoading.value = false
+    return
+  }
+  isLoading.value = true
+  loadError.value = ''
+  try {
+    const data = await PoliciesApi.detail(policyId)
+    form.name = data.name || ''
+    form.risk_threshold_low = data.risk_threshold_low ?? 20
+    form.risk_threshold_high = data.risk_threshold_high ?? 60
+    form.low_risk_actions = Array.isArray(data.low_risk_actions) ? [...data.low_risk_actions] : []
+    form.high_risk_actions = Array.isArray(data.high_risk_actions) ? [...data.high_risk_actions] : []
+    form.default_ttl_seconds = data.default_ttl_seconds ?? 1800
+    form.is_active = data.is_active ?? true
+  } catch (error) {
+    loadError.value = error?.message || '请求失败，请稍后重试'
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function handleSubmit() {
   if (!formRef.value) return
-  formRef.value.validate((valid) => {
-    if (!valid) return
-    ElMessage.success('策略配置已保存（假数据，未调用后端）')
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
+
+  if (form.risk_threshold_high <= form.risk_threshold_low) {
+    ElMessage.warning('高风险阈值必须大于低风险阈值')
+    return
+  }
+
+  submitting.value = true
+  try {
+    await PoliciesApi.update(policyId, {
+      risk_threshold_low: form.risk_threshold_low,
+      risk_threshold_high: form.risk_threshold_high,
+      low_risk_actions: form.low_risk_actions,
+      high_risk_actions: form.high_risk_actions,
+      default_ttl_seconds: form.default_ttl_seconds,
+      is_active: form.is_active,
+    })
+    ElMessage.success('策略配置已保存')
     router.push({ name: 'policies' })
-  })
+  } catch (error) {
+    ElMessage.error(error?.message || '保存失败')
+  } finally {
+    submitting.value = false
+  }
 }
 
 function goBack() {
   router.push({ name: 'policies' })
 }
+
+onMounted(loadPolicy)
 </script>
 
 <style scoped>
-.page-wrapper {
-  padding: 24px;
-  color: var(--text-color);
-}
-
-.page-header h2 {
-  margin: 0 0 4px;
-}
-
-.page-header p {
-  margin: 0 0 16px;
-  color: var(--muted-color);
-  font-size: 13px;
-}
-
-.policy-form {
-  max-width: 980px;
-}
-
-.card-block {
-  margin-bottom: 16px;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-weight: 500;
-}
-
-.form-actions {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.muted {
-  color: var(--muted-color);
-  font-size: 12px;
-}
+.page-wrapper { padding: 24px; color: var(--text-color); }
+.page-header h2 { margin: 0 0 4px; }
+.page-header p { margin: 0 0 16px; color: var(--muted-color); font-size: 13px; }
+.policy-form { max-width: 900px; }
+.card-block { margin-bottom: 16px; }
+.card-header { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.form-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.muted { color: var(--muted-color); font-size: 12px; }
+.tag-input { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 </style>
-

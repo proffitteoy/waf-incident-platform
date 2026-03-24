@@ -1,53 +1,58 @@
 <template>
   <div class="page-wrapper">
     <header class="page-header">
-      <h2>事件详情 {{ incident.id }}</h2>
+      <h2>事件详情 {{ incident.id || incidentId }}</h2>
       <p>查看单个安全事件的完整上下文、原始日志与 LLM 分析结果。</p>
     </header>
 
-    <el-row :gutter="16">
+    <el-skeleton v-if="isLoading" animated :rows="8" />
+
+    <el-result
+      v-else-if="loadError"
+      icon="error"
+      title="事件详情加载失败"
+      :sub-title="loadError"
+    >
+      <template #extra>
+        <el-button type="primary" @click="loadIncidentDetail">重试</el-button>
+      </template>
+    </el-result>
+
+    <el-row v-else :gutter="16">
       <el-col :span="16">
         <!-- 基本信息 -->
         <el-card shadow="never" class="card-block">
           <template #header>
             <div class="card-header">
               <span>事件基本信息</span>
-              <el-tag :type="riskTagType(incident.riskLevel)" effect="dark" size="small">
-                {{ riskLabel(incident.riskLevel) }}
+              <el-tag :type="riskTagType(incident.severity)" effect="dark" size="small">
+                {{ riskLabel(incident.severity) }}
               </el-tag>
             </div>
           </template>
           <el-descriptions :column="2" size="small" border>
-            <el-descriptions-item label="事件 ID">
-              {{ incident.id }}
-            </el-descriptions-item>
+            <el-descriptions-item label="事件 ID">{{ incident.id }}</el-descriptions-item>
             <el-descriptions-item label="发生时间">
-              {{ incident.time }}
+              {{ formatDateTime(incident.first_seen || incident.created_at) }}
             </el-descriptions-item>
-            <el-descriptions-item label="来源 IP">
-              {{ incident.sourceIp }}
-            </el-descriptions-item>
-            <el-descriptions-item label="目标 URL">
-              {{ incident.url }}
-            </el-descriptions-item>
+            <el-descriptions-item label="来源 IP">{{ incident.src_ip || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="目标 URL">{{ incident.url || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="请求方法">
-              <el-tag size="small" type="info">{{ incident.method }}</el-tag>
+              <el-tag size="small" type="info">{{ incident.method || '暂无' }}</el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="User-Agent">
-              <span class="mono">{{ incident.userAgent }}</span>
+              <span class="mono">{{ incident.user_agent || incident.userAgent || '暂无' }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="当前状态">
               <el-tag :type="statusTagType(incident.status)" size="small">
                 {{ statusLabel(incident.status) }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="来源">
-              {{ incident.source }}
-            </el-descriptions-item>
+            <el-descriptions-item label="来源">{{ incident.source || '事件引擎' }}</el-descriptions-item>
           </el-descriptions>
         </el-card>
 
-        <!-- 原始日志 -->
+        <!-- 原始日志 / 摘要 -->
         <el-card shadow="never" class="card-block">
           <template #header>
             <div class="card-header">
@@ -59,13 +64,9 @@
             </div>
           </template>
           <el-collapse-transition>
-            <pre v-if="showRawLog" class="log-block">
-{{ incident.rawLog }}
-            </pre>
+            <pre v-if="showRawLog" class="log-block">{{ incident.summary || '暂无日志摘要' }}</pre>
           </el-collapse-transition>
-          <p v-if="!showRawLog" class="muted">
-            日志内容已折叠，点击右上角按钮展开查看。当前为假数据示例，后续接入真实原始日志。
-          </p>
+          <p v-if="!showRawLog" class="muted">日志内容已折叠，点击右上角按钮展开查看。</p>
         </el-card>
 
         <!-- 关联告警 & 动作历史 -->
@@ -77,21 +78,12 @@
                   <span>关联告警</span>
                 </div>
               </template>
-              <el-table
-                :data="incident.relatedAlerts"
-                size="small"
-                border
-                style="width: 100%"
-              >
+              <el-table :data="alerts" size="small" border style="width: 100%">
                 <el-table-column prop="id" label="告警 ID" width="120" />
-                <el-table-column prop="rule" label="规则" show-overflow-tooltip />
+                <el-table-column prop="title" label="规则" show-overflow-tooltip />
                 <el-table-column prop="severity" label="等级" width="90">
                   <template #default="{ row }">
-                    <el-tag
-                      :type="riskTagType(row.severity)"
-                      size="small"
-                      effect="plain"
-                    >
+                    <el-tag :type="riskTagType(row.severity)" size="small" effect="plain">
                       {{ riskLabel(row.severity) }}
                     </el-tag>
                   </template>
@@ -108,14 +100,14 @@
               </template>
               <el-timeline>
                 <el-timeline-item
-                  v-for="item in incident.actionHistory"
-                  :key="item.time"
-                  :timestamp="item.time"
-                  :type="item.type"
+                  v-for="item in actions"
+                  :key="item.id"
+                  :timestamp="formatDateTime(item.created_at || item.executed_at)"
+                  :type="item.result === 'success' ? 'success' : 'primary'"
                   size="small"
                 >
-                  <div class="timeline-title">{{ item.title }}</div>
-                  <div class="timeline-desc muted">{{ item.detail }}</div>
+                  <div class="timeline-title">{{ actionTitle(item) }}</div>
+                  <div class="timeline-desc muted">{{ actionDetail(item) }}</div>
                 </el-timeline-item>
               </el-timeline>
             </el-card>
@@ -130,18 +122,12 @@
             </div>
           </template>
           <div class="comments-list" v-if="comments.length">
-            <div
-              v-for="(item, idx) in comments"
-              :key="idx"
-              class="comment-item"
-            >
+            <div v-for="(item, idx) in comments" :key="idx" class="comment-item">
               <div class="comment-meta">
                 <span class="comment-author">{{ item.author }}</span>
                 <span class="comment-time muted">{{ item.time }}</span>
               </div>
-              <div class="comment-content">
-                {{ item.content }}
-              </div>
+              <div class="comment-content">{{ item.content }}</div>
             </div>
           </div>
           <p v-else class="muted">暂无评论，您可以添加一条处理备注。</p>
@@ -152,7 +138,7 @@
                 v-model="newComment.content"
                 type="textarea"
                 :rows="3"
-                placeholder="记录本次人工分析、处置或沟通的关键信息（假数据，不会持久化）"
+                placeholder="记录本次人工分析、处置或沟通的关键信息"
                 maxlength="500"
                 show-word-limit
               />
@@ -165,9 +151,6 @@
               >
                 添加备注
               </el-button>
-              <span class="muted" style="margin-left: 8px">
-                备注仅用于前端演示，后续接入后台审计日志。
-              </span>
             </el-form-item>
           </el-form>
         </el-card>
@@ -179,53 +162,61 @@
           <template #header>
             <div class="card-header">
               <span>LLM 分析</span>
-              <el-tag
-                :type="llmTagType(incident.llmStatus)"
-                size="small"
-              >
-                {{ llmLabel(incident.llmStatus) }}
-              </el-tag>
+              <el-tag :type="llmTagType(llmStatus)" size="small">{{ llmLabel(llmStatus) }}</el-tag>
             </div>
           </template>
 
-          <p class="muted">
-            当前为本地假数据示例，后续会根据 `/api/incidents/:id/llm-report` 返回真实内容。
-          </p>
-
-          <div v-if="incident.llmStatus === 'not_started'" class="llm-placeholder">
-            <p>尚未触发 LLM 分析，可以点击下方按钮进行一次自动研判。</p>
-          </div>
-          <div v-else-if="incident.llmStatus === 'running'" class="llm-placeholder">
-            <el-skeleton animated :rows="4" />
+          <div v-if="llmStatus === 'not_started'" class="llm-placeholder">
+            <p>暂无 LLM 分析结果。</p>
           </div>
           <div v-else class="llm-result">
-            <h4>模型研判结论（示例）</h4>
-            <ul>
-              <li>疑似 SQL 注入攻击，命中了多条数据库访问关键字。</li>
-              <li>请求频率与 UA 特征疑似自动化工具，不像正常用户行为。</li>
-              <li>建议对源 IP 临时封禁 24 小时，并对相关规则进行加强。</li>
+            <h4>攻击链</h4>
+            <ul v-if="llmAttackChain.length">
+              <li v-for="(step, idx) in llmAttackChain" :key="idx">
+                <strong>{{ step.stage }}</strong>：{{ step.detail }}
+              </li>
             </ul>
+            <p v-else class="muted">暂无攻击链数据</p>
+
+            <h4>关键 IOC</h4>
+            <ul v-if="llmIocs.length">
+              <li v-for="(ioc, idx) in llmIocs" :key="idx">
+                <span v-if="ioc.type"><strong>{{ ioc.type }}</strong>：</span>
+                <span v-if="Array.isArray(ioc.value)">{{ ioc.value.join(', ') }}</span>
+                <span v-else>{{ ioc.value ?? ioc }}</span>
+              </li>
+            </ul>
+            <p v-else class="muted">暂无 IOC 信息</p>
+
             <h4>影响评估</h4>
-            <p class="muted">
-              当前尚未发现实际成功入侵的证据，但如果放任该模式持续存在，可能导致数据库敏感信息泄露。
-            </p>
+            <template v-if="llmRiskAssessment.length">
+              <p v-for="(entry, idx) in llmRiskAssessment" :key="idx" class="muted">
+                <strong>{{ entry.key }}</strong>：{{ entry.value }}
+              </p>
+            </template>
+            <p v-else class="muted">暂无影响评估</p>
+
+            <h4>建议处置（低风险）</h4>
+            <ul v-if="llmActionsLow.length">
+              <li v-for="(action, idx) in llmActionsLow" :key="idx">{{ action }}</li>
+            </ul>
+            <p v-else class="muted">-</p>
+
+            <h4>建议处置（高风险）</h4>
+            <ul v-if="llmActionsHigh.length">
+              <li v-for="(action, idx) in llmActionsHigh" :key="idx">{{ action }}</li>
+            </ul>
+            <p v-else class="muted">-</p>
+
+            <h4>置信度</h4>
+            <p class="muted">{{ llmConfidenceText }}</p>
           </div>
 
           <div class="llm-actions">
-            <el-button
-              type="primary"
-              :loading="incident.llmStatus === 'running'"
-              @click="triggerAnalyze"
-            >
-              触发分析
-            </el-button>
-            <el-button
-              :disabled="incident.llmStatus === 'not_started'"
-              @click="reAnalyze"
-            >
-              重新分析
-            </el-button>
+            <el-button type="primary" disabled>触发分析</el-button>
+            <el-button disabled>重新分析</el-button>
           </div>
+          <p class="muted" style="margin-top: 8px">暂不支持在详情页重新触发分析。</p>
         </el-card>
 
         <!-- 状态变更 -->
@@ -235,15 +226,13 @@
               <span>状态变更</span>
             </div>
           </template>
-          <el-radio-group v-model="incident.status" class="status-radios">
+          <el-radio-group v-model="incident.status" class="status-radios" disabled>
             <el-radio-button label="pending">待分析</el-radio-button>
             <el-radio-button label="analyzed">已分析</el-radio-button>
             <el-radio-button label="handled">已处理</el-radio-button>
             <el-radio-button label="closed">已关闭</el-radio-button>
           </el-radio-group>
-          <p class="muted" style="margin-top: 8px">
-            这里的状态切换为前端本地操作，后续会通过 API 回写事件状态并落库。
-          </p>
+          <p class="muted" style="margin-top: 8px">当前版本暂不支持在详情页直接修改状态。</p>
         </el-card>
       </el-col>
     </el-row>
@@ -251,74 +240,69 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Cpu, Document } from '@element-plus/icons-vue'
+import { Document } from '@element-plus/icons-vue'
+import { IncidentsApi } from '../../api/incidents'
 
 const route = useRoute()
+const incidentId = String(route.params.id || '')
 
-const incidentId = route.params.id || 'INC-20240001'
-
-const incident = ref(buildMockIncident(String(incidentId)))
-
+const incident = ref({})
+const alerts = ref([])
+const actions = ref([])
+const llmReport = ref(null)
+const isLoading = ref(true)
+const loadError = ref('')
 const showRawLog = ref(false)
-
-const comments = ref([
-  {
-    author: 'SOC 分析员 A',
-    time: '2026-03-01 09:32:10',
-    content: '初步确认来源 IP 属于海外云服务商，建议短期封禁并持续观察。',
-  },
-])
-
-const newComment = ref({
-  content: '',
-})
+const comments = ref([])
+const newComment = ref({ content: '' })
 
 function toggleRawLog() {
   showRawLog.value = !showRawLog.value
 }
 
-function addComment() {
+async function addComment() {
   if (!newComment.value.content.trim()) return
-  comments.value.unshift({
-    author: '当前用户',
-    time: new Date().toLocaleString(),
-    content: newComment.value.content.trim(),
-  })
-  newComment.value.content = ''
-  ElMessage.success('已添加备注（仅前端示例，不会持久化）')
-}
-
-function triggerAnalyze() {
-  if (incident.value.llmStatus === 'running') return
-  incident.value.llmStatus = 'running'
-  ElMessage.success('已触发 LLM 分析（假操作，后续接入后端任务）')
-}
-
-function reAnalyze() {
-  incident.value.llmStatus = 'running'
-  ElMessage.info('已重新触发 LLM 分析（假操作）')
+  try {
+    await IncidentsApi.addComment(incidentId, {
+      comment: newComment.value.content.trim(),
+      actor: '当前用户',
+    })
+    comments.value.unshift({
+      author: '当前用户',
+      time: new Date().toLocaleString(),
+      content: newComment.value.content.trim(),
+    })
+    newComment.value.content = ''
+    ElMessage.success('已添加备注')
+  } catch (error) {
+    ElMessage.error(error?.message || '添加备注失败')
+  }
 }
 
 function riskLabel(level) {
   switch (level) {
+    case 'critical':
     case 'high':
       return '高'
+    case 'med':
     case 'medium':
       return '中'
     case 'low':
       return '低'
     default:
-      return level
+      return level || '-'
   }
 }
 
 function riskTagType(level) {
   switch (level) {
+    case 'critical':
     case 'high':
       return 'danger'
+    case 'med':
     case 'medium':
       return 'warning'
     case 'low':
@@ -331,28 +315,34 @@ function riskTagType(level) {
 function statusLabel(status) {
   switch (status) {
     case 'pending':
+    case 'open':
       return '待分析'
     case 'analyzed':
       return '已分析'
     case 'handled':
-      return '已处理'
+    case 'mitigating':
+      return '处理中'
     case 'closed':
+    case 'resolved':
       return '已关闭'
     default:
-      return status
+      return status || '-'
   }
 }
 
 function statusTagType(status) {
   switch (status) {
     case 'pending':
+    case 'open':
       return 'info'
     case 'analyzed':
       return 'primary'
     case 'handled':
-      return 'success'
+    case 'mitigating':
+      return 'warning'
     case 'closed':
-      return 'default'
+    case 'resolved':
+      return 'success'
     default:
       return ''
   }
@@ -362,12 +352,8 @@ function llmLabel(status) {
   switch (status) {
     case 'not_started':
       return '未触发'
-    case 'running':
-      return '分析中'
     case 'completed':
       return '已完成'
-    case 'failed':
-      return '失败'
     default:
       return status
   }
@@ -377,78 +363,94 @@ function llmTagType(status) {
   switch (status) {
     case 'not_started':
       return 'default'
-    case 'running':
-      return 'warning'
     case 'completed':
       return 'success'
-    case 'failed':
-      return 'danger'
     default:
       return ''
   }
 }
 
-function buildMockIncident(id) {
-  const baseId = Number(id.replace(/\D/g, '')) || 20240001
-  const riskLevels = ['high', 'medium', 'low']
-  const statuses = ['pending', 'analyzed', 'handled', 'closed']
-  const riskLevel = riskLevels[baseId % riskLevels.length]
-  const status = statuses[baseId % statuses.length]
+function formatDateTime(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString()
+}
 
-  const mock = {
-    id: id,
-    time: '2026-03-01 08:23:45',
-    sourceIp: '203.0.113.42',
-    url: '/api/v1/orders?user_id=1234',
-    method: 'POST',
-    userAgent:
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    riskLevel,
-    status,
-    source: 'WAF - Web 应用防火墙',
-    llmStatus: 'completed',
-    rawLog: createRawLogSample(id),
-    relatedAlerts: [
-      {
-        id: 'ALERT-1001',
-        rule: 'SQL Injection - UNION SELECT pattern',
-        severity: 'high',
-      },
-      {
-        id: 'ALERT-1002',
-        rule: 'Abnormal parameter length on /api/v1/orders',
-        severity: 'medium',
-      },
-    ],
-    actionHistory: [
-      {
-        time: '2026-03-01 08:25:10',
-        title: '自动封禁 IP（示例）',
-        detail: '根据策略，已对源 IP 203.0.113.42 进行 1 小时临时封禁。',
-        type: 'danger',
-      },
-      {
-        time: '2026-03-01 09:00:03',
-        title: 'LLM 分析任务完成',
-        detail: '模型完成对请求与上下文日志的研判，输出风险评估。',
-        type: 'primary',
-      },
-    ],
+function actionTitle(item) {
+  return item?.action_type || '动作'
+}
+
+function actionDetail(item) {
+  return item?.detail || item?.result || '-'
+}
+
+const llmStatus = computed(() => (llmReport.value ? 'completed' : 'not_started'))
+
+const llmAttackChain = computed(() => {
+  const value = llmReport.value?.attack_chain
+  if (Array.isArray(value)) return value
+  return []
+})
+
+const llmIocs = computed(() => {
+  const value = llmReport.value?.key_iocs
+  if (Array.isArray(value)) return value
+  return []
+})
+
+const llmRiskAssessment = computed(() => {
+  const value = llmReport.value?.risk_assessment
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+  return Object.entries(value).map(([key, val]) => ({
+    key,
+    value: typeof val === 'object' ? JSON.stringify(val) : String(val ?? ''),
+  }))
+})
+
+const llmActionsLow = computed(() => {
+  const value = llmReport.value?.recommended_actions_low
+  if (Array.isArray(value)) return value
+  return []
+})
+
+const llmActionsHigh = computed(() => {
+  const value = llmReport.value?.recommended_actions_high
+  if (Array.isArray(value)) return value
+  return []
+})
+
+const llmConfidenceText = computed(() => {
+  const value = llmReport.value?.confidence
+  if (value === null || value === undefined || value === '') return '-'
+  const numeric = Number(value)
+  if (Number.isNaN(numeric)) return String(value)
+  return `${Math.round(numeric)}%`
+})
+
+async function loadIncidentDetail() {
+  if (!incidentId) {
+    loadError.value = '缺少事件 ID'
+    isLoading.value = false
+    return
   }
-
-  return mock
+  isLoading.value = true
+  loadError.value = ''
+  try {
+    const data = await IncidentsApi.detail(incidentId)
+    incident.value = data?.incident || {}
+    alerts.value = data?.alerts || []
+    actions.value = data?.actions || []
+    llmReport.value = (data?.llm_reports || [])[0] || null
+    comments.value = []
+  } catch (error) {
+    loadError.value = error?.message || '请求失败，请稍后重试'
+  } finally {
+    isLoading.value = false
+  }
 }
 
-function createRawLogSample(id) {
-  return [
-    `2026-03-01T08:23:45.123Z waf-edge app=web-api incident_id=${id}`,
-    'client_ip=203.0.113.42 method=POST scheme=https host=api.example.com',
-    'path="/api/v1/orders" qs="user_id=1234" status=403 bytes=512',
-    'rule_id=900001 rule_name="SQLi detection: stacked queries" severity=high',
-    'request_body="id=1; DROP TABLE users; --"',
-    'ua="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"',
-  ].join('\n')
-}
+onMounted(loadIncidentDetail)
 </script>
 
 <style scoped>
@@ -492,6 +494,8 @@ function createRawLogSample(id) {
   font-size: 12px;
   line-height: 1.5;
   overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .mono {
@@ -551,7 +555,7 @@ function createRawLogSample(id) {
 }
 
 .llm-result h4 {
-  margin: 4px 0;
+  margin: 8px 0 4px;
   font-size: 13px;
 }
 
@@ -574,4 +578,3 @@ function createRawLogSample(id) {
   gap: 4px;
 }
 </style>
-

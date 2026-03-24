@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../../core/http/async-handler";
+import { HttpError } from "../../core/http/http-error";
 import { query } from "../../core/db/pool";
+import { parseLimit, parseOffset } from "../../core/http/query-utils";
 import { incidentOrchestratorService } from "../../services/incident/incident-orchestrator.service";
 
 const reportSchema = z.object({
@@ -27,6 +29,66 @@ const analyzeEventsSchema = z.object({
 });
 
 export const llmReportsRouter = Router();
+
+export const llmGlobalRouter = Router();
+
+llmGlobalRouter.get(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const result = await query(
+      `SELECT lr.id, lr.incident_id, lr.model, lr.task, lr.prompt_version, lr.prompt_digest,
+              lr.input_digest, lr.attack_chain, lr.key_iocs, lr.risk_assessment,
+              lr.recommended_actions_low, lr.recommended_actions_high, lr.confidence, lr.created_at,
+              i.title AS incident_title, i.severity, i.src_ip
+       FROM llm_reports lr
+       LEFT JOIN incidents i ON i.id = lr.incident_id
+       WHERE lr.id = $1 LIMIT 1`,
+      [req.params.id]
+    );
+    if (result.rowCount === 0) {
+      throw new HttpError(404, "report not found");
+    }
+    res.json(result.rows[0]);
+  })
+);
+
+llmGlobalRouter.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    const limit = parseLimit(req.query.limit as string | undefined, 200);
+    const offset = parseOffset(req.query.offset as string | undefined);
+
+    const filterParams: unknown[] = [];
+    const conditions: string[] = [];
+
+    if (req.query.incident_id) {
+      filterParams.push(req.query.incident_id);
+      conditions.push(`lr.incident_id::text = $${filterParams.length}`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    const countResult = await query(
+      `SELECT COUNT(*) FROM llm_reports lr ${where}`,
+      filterParams
+    );
+    const total = Number(countResult.rows[0].count);
+
+    const dataParams = [...filterParams, limit, offset];
+    const dataResult = await query(
+      `SELECT lr.id, lr.incident_id, lr.model, lr.task, lr.confidence, lr.created_at,
+              i.title AS incident_title, i.severity, i.src_ip
+       FROM llm_reports lr
+       LEFT JOIN incidents i ON i.id = lr.incident_id
+       ${where}
+       ORDER BY lr.created_at DESC
+       LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
+      dataParams
+    );
+
+    res.json({ items: dataResult.rows, total, limit, offset });
+  })
+);
 
 llmReportsRouter.post(
   "/analyze-events",

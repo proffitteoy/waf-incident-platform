@@ -23,11 +23,11 @@ incidentsRouter.get(
 
     if (req.query.status) {
       params.push(req.query.status);
-      conditions.push(`status = $${params.length}`);
+      conditions.push(`i.status = $${params.length}`);
     }
     if (req.query.severity) {
       params.push(req.query.severity);
-      conditions.push(`severity = $${params.length}`);
+      conditions.push(`i.severity = $${params.length}`);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -35,10 +35,11 @@ incidentsRouter.get(
     params.push(offset);
 
     const sql = `
-      SELECT id, asset_id, title, severity, status, first_seen, last_seen, src_ip, summary, created_at, updated_at
-      FROM incidents
+      SELECT i.id, i.asset_id, i.title, i.severity, i.status, i.first_seen, i.last_seen, i.src_ip, i.summary, i.created_at, i.updated_at,
+             EXISTS(SELECT 1 FROM llm_reports lr WHERE lr.incident_id = i.id) AS has_llm_report
+      FROM incidents i
       ${where}
-      ORDER BY last_seen DESC
+      ORDER BY i.last_seen DESC
       LIMIT $${params.length - 1} OFFSET $${params.length}
     `;
 

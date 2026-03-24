@@ -7,6 +7,8 @@ import { pool, query } from "../../core/db/pool";
 import { logger } from "../../core/logger";
 import { parseCorazaAuditJsonLine } from "../../services/ingestion/coraza-audit.parser";
 import { incidentOrchestratorService } from "../../services/incident/incident-orchestrator.service";
+import { isIpWhitelisted } from "../../services/policy/ip-whitelist.service";
+import { isIpGeoBlocked } from "../../services/policy/geo-block.service";
 
 const ingestCorazaSchema = z
   .object({
@@ -166,13 +168,49 @@ ingestionRouter.post(
       return;
     }
 
+    // 对每个事件的 src_ip 做策略检查（白名单 + 地区封禁），结果批量缓存
+    const policyCache = new Map<string, { whitelisted: boolean; geoBlocked: boolean; country: string | null }>();
+    const uniqueIps = [...new Set(events.map((e) => e.src_ip).filter(Boolean))] as string[];
+
+    for (const ip of uniqueIps) {
+      try {
+        const whitelisted = await isIpWhitelisted(ip);
+        const { blocked: geoBlocked, country } = whitelisted ? { blocked: false, country: null } : await isIpGeoBlocked(ip);
+        policyCache.set(ip, { whitelisted, geoBlocked, country });
+      } catch (err) {
+        logger.warn("policy check failed for ip, defaulting to allow", { ip, error: err instanceof Error ? err.message : String(err) });
+        policyCache.set(ip, { whitelisted: false, geoBlocked: false, country: null });
+      }
+    }
+
     const client = await pool.connect();
     const insertedEventIds: number[] = [];
+    const geoBlockedEventIds: number[] = [];
 
     try {
       await client.query("BEGIN");
 
+      let whitelistedCount = 0;
+      let geoBlockedCount = 0;
+
       for (const event of events) {
+        const srcIp = event.src_ip ?? null;
+        const policy = srcIp ? policyCache.get(srcIp) : null;
+
+        // IP 白名单：跳过该事件，不写入 events_raw
+        if (policy?.whitelisted) {
+          whitelistedCount += 1;
+          continue;
+        }
+
+        // 地区封禁：写入 events_raw，但在 tags 中追加封禁标记
+        const tags = { ...(event.tags ?? {}) };
+        if (policy?.geoBlocked && policy.country) {
+          tags["geo_blocked"] = true;
+          tags["geo_country"] = policy.country;
+          geoBlockedCount += 1;
+        }
+
         const insertResult = await client.query<{ id: number }>(
           `INSERT INTO events_raw (
              ts, asset_id, src_ip, method, uri, status,
@@ -182,7 +220,7 @@ ingestionRouter.post(
           [
             event.ts,
             input.asset_id ?? event.asset_id ?? null,
-            event.src_ip ?? null,
+            srcIp,
             event.method ?? null,
             event.uri ?? null,
             event.status ?? null,
@@ -191,18 +229,53 @@ ingestionRouter.post(
             event.rule_msg ?? null,
             event.rule_score ?? 0,
             event.waf_action ?? null,
-            JSON.stringify(event.tags ?? {})
+            JSON.stringify(tags)
           ]
         );
 
-        insertedEventIds.push(insertResult.rows[0].id);
+        const eventId = insertResult.rows[0].id;
+        insertedEventIds.push(eventId);
+        if (policy?.geoBlocked) {
+          geoBlockedEventIds.push(eventId);
+        }
+      }
+
+      if (whitelistedCount > 0) {
+        logger.info("ingestion: whitelisted events skipped", { whitelisted_count: whitelistedCount });
+      }
+      if (geoBlockedCount > 0) {
+        logger.info("ingestion: geo-blocked events tagged", { geo_blocked_count: geoBlockedCount });
       }
 
       await client.query("COMMIT");
-      res.status(201).json({ inserted: events.length, parsed: events.length, dropped_lines: droppedLines });
+      res.status(201).json({
+        inserted: insertedEventIds.length,
+        parsed: events.length,
+        dropped_lines: droppedLines,
+        whitelisted_skipped: events.length - insertedEventIds.length - droppedLines,
+        geo_blocked_tagged: geoBlockedEventIds.length
+      });
+
+      // 地区封禁事件：强制触发自动分析（无论 AUTO_ANALYZE_ON_INGEST 是否开启）
+      if (geoBlockedEventIds.length > 0) {
+        const geoIds = [...geoBlockedEventIds];
+        const actor = env.AUTO_ANALYZE_ACTOR || "geo-block-policy";
+
+        setImmediate(async () => {
+          try {
+            await incidentOrchestratorService.analyzeByEventIds({ event_ids: geoIds, requested_by: actor });
+            logger.info("geo block auto-analysis completed", { event_ids: geoIds.slice(0, 20) });
+          } catch (err) {
+            logger.error("geo block auto-analysis failed", { error: err instanceof Error ? err.message : String(err) });
+          }
+        });
+      }
 
       if (env.AUTO_ANALYZE_ON_INGEST && insertedEventIds.length > 0) {
-        const eventIds = [...insertedEventIds];
+        // 排除已被地区封禁分析处理过的事件，避免重复分析
+        const remainingIds = insertedEventIds.filter((id) => !geoBlockedEventIds.includes(id));
+        if (remainingIds.length === 0) return;
+        const eventIds = remainingIds;
         const actor = env.AUTO_ANALYZE_ACTOR;
 
         setImmediate(async () => {
