@@ -13,7 +13,11 @@ export const parseRangeToHours = (value: string | undefined): number => {
     return 24 * 7;
   }
 
-  throw new HttpError(400, "invalid range, expected one of: 1h,24h,7d");
+  if (value === "30d") {
+    return 24 * 30;
+  }
+
+  throw new HttpError(400, "invalid range, expected one of: 1h,24h,7d,30d");
 };
 
 export const parseLimit = (value: string | undefined, fallback = 50): number => {

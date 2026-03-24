@@ -24,7 +24,7 @@ interface AnalyzeByFiltersInput {
 }
 
 interface AnalyzeByEventIdsInput {
-  event_ids: number[];
+  event_ids: Array<number | string>;
   requested_by: string;
 }
 
@@ -249,7 +249,14 @@ export const incidentOrchestratorService = {
   },
 
   analyzeByEventIds: async (input: AnalyzeByEventIdsInput): Promise<AnalyzeIncidentResult> => {
-    const uniqueEventIds = [...new Set(input.event_ids)].filter((id) => Number.isInteger(id) && id > 0);
+    const uniqueEventIds = [
+      ...new Set(
+        input.event_ids
+          .map((id) => (typeof id === "number" ? id : Number.parseInt(String(id), 10)))
+          .filter((id) => Number.isSafeInteger(id) && id > 0)
+      )
+    ];
+
     if (uniqueEventIds.length === 0) {
       throw new HttpError(400, "event_ids must be a non-empty array of positive integers");
     }

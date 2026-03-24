@@ -8,4 +8,8 @@ export const DashboardApi = {
   timeseries(params) {
     return request('/dashboard/timeseries', { query: params })
   },
+
+  latestEvents(params = { limit: 10, offset: 0 }) {
+    return request('/events', { query: params })
+  },
 }

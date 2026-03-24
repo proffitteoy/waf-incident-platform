@@ -192,7 +192,7 @@ const statusLabel = (status) => ({
   allow: '放行'
 }[status] || status || '-')
 
-const toRangeHours = () => (trendRange.value === '7d' ? 168 : 720)
+const toRangeParam = () => (trendRange.value === '30d' ? '30d' : '7d')
 
 const formatTimestamp = (value) => {
   if (!value) return '-'
@@ -260,10 +260,10 @@ const refreshDashboard = async () => {
   dashboardLoading.value = true
   dashboardError.value = ''
   try {
-    const hours = toRangeHours()
+    const range = toRangeParam()
     const [overview, timeseries, events] = await Promise.all([
-      DashboardApi.overview({ range: hours }),
-      DashboardApi.timeseries({ metric: 'requests', range: hours }),
+      DashboardApi.overview({ range }),
+      DashboardApi.timeseries({ metric: 'requests', range }),
       DashboardApi.latestEvents({ limit: 10, offset: 0 }),
     ])
 
