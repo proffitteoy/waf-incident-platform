@@ -108,7 +108,7 @@ waf-incident-platform/
 
 ## Docker Compose 部署（全容器）
 
-适用于联调、演示或验收环境，一条命令启动完整服务栈（postgres/redis/backend/frontend/waf/forensics-worker）。
+适用于联调、演示或验收环境，一条命令启动完整服务栈（postgres/redis/backend/frontend/waf/forensics-worker/ingestion-worker）。
 
 需要在包含 docker-compose.yml目录下运行
 1. 复制后端环境变量模板：`copy backend\\.env.example backend\\.env`
@@ -119,7 +119,7 @@ waf-incident-platform/
 3. 建议先做启动前检查：`powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\check-preflight.ps1`
 4. 全量启动（含构建，首次或变更镜像使用）：`docker compose up -d --build`
 5. 查看服务状态：`docker compose ps`
-6. 查看后端日志（可选）：`docker compose logs -f backend`
+6. 查看后端与自动入库 worker 日志（可选）：`docker compose logs -f backend ingestion-worker`
 
 7. 首次成功后，日常启动不要每次都带 `--build`，使用：`docker compose up -d`
 
