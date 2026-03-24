@@ -4,6 +4,7 @@ import { asyncHandler } from "../../core/http/async-handler";
 import { HttpError } from "../../core/http/http-error";
 import { query } from "../../core/db/pool";
 import { logger } from "../../core/logger";
+import { parseLimit, parseOffset } from "../../core/http/query-utils";
 import {
   cacheActiveActionState,
   clearActiveActionState,
@@ -40,6 +41,43 @@ const rollbackSchema = z.object({
 });
 
 export const actionsRouter = Router();
+
+actionsRouter.get(
+  "/actions",
+  asyncHandler(async (req, res) => {
+    const limit = parseLimit(req.query.limit as string | undefined, 100);
+    const offset = parseOffset(req.query.offset as string | undefined);
+
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (req.query.result) {
+      params.push(req.query.result);
+      conditions.push(`result = $${params.length}`);
+    }
+
+    if (req.query.action_type) {
+      params.push(req.query.action_type);
+      conditions.push(`action_type = $${params.length}`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    params.push(limit);
+    params.push(offset);
+
+    const sql = `
+      SELECT id, incident_id, approval_id, action_type, scope, target, ttl_seconds,
+             requested_by, executed_by, result, detail, rollback_token, created_at, executed_at
+      FROM actions
+      ${where}
+      ORDER BY created_at DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `;
+
+    const result = await query(sql, params);
+    res.json({ items: result.rows, limit, offset });
+  })
+);
 
 actionsRouter.post(
   "/incidents/:id/actions/execute",

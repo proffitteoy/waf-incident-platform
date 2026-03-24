@@ -15,7 +15,6 @@
             style="width: 180px"
           >
             <el-option label="待执行" value="pending" />
-            <el-option label="执行中" value="running" />
             <el-option label="已完成" value="success" />
             <el-option label="已失败" value="failed" />
             <el-option label="已回滚" value="rolled_back" />
@@ -28,10 +27,10 @@
             clearable
             style="width: 200px"
           >
-            <el-option label="封禁 IP" value="block-ip" />
-            <el-option label="修改规则" value="update-rule" />
-            <el-option label="回滚配置" value="rollback" />
-            <el-option label="限流" value="rate-limit" />
+            <el-option label="封禁" value="block" />
+            <el-option label="挑战" value="challenge" />
+            <el-option label="回滚" value="rollback" />
+            <el-option label="限流" value="rate_limit" />
           </el-select>
         </el-form-item>
         <el-form-item label="时间范围">
@@ -56,7 +55,7 @@
     </el-card>
 
     <el-card shadow="never" class="table-card">
-      <el-table :data="filteredActions" border stripe style="width: 100%">
+      <el-table v-loading="loading" :data="filteredActions" border stripe style="width: 100%">
         <el-table-column prop="id" label="动作 ID" width="140" />
         <el-table-column prop="incidentId" label="关联事件 ID" width="150">
           <template #default="{ row }">
@@ -96,16 +95,17 @@
         </el-table-column>
       </el-table>
       <p class="muted" style="margin-top: 8px">
-        执行状态实时更新可通过 WebSocket 或轮询实现，当前为本地假数据静态展示。
+        执行状态当前由 API 拉取，点击查询或刷新页面可更新。
       </p>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { ActionsApi } from '../../api/actions'
 
 const router = useRouter()
 
@@ -115,7 +115,8 @@ const filters = reactive({
   dateRange: [],
 })
 
-const actions = ref(createMockActions())
+const loading = ref(false)
+const actions = ref([])
 
 const filteredActions = computed(() => {
   const { status, actionType, dateRange } = filters
@@ -133,12 +134,42 @@ const filteredActions = computed(() => {
   })
 })
 
-function handleSearch() {}
+async function loadActions() {
+  loading.value = true
+  try {
+    const query = { limit: 200, offset: 0 }
+
+    if (filters.actionType) {
+      query.action_type = filters.actionType
+    }
+
+    if (filters.status === 'pending') query.result = 'pending'
+    if (filters.status === 'success') query.result = 'success'
+    if (filters.status === 'failed') query.result = 'fail'
+    if (filters.status === 'rolled_back') {
+      query.result = 'success'
+      query.action_type = 'rollback'
+    }
+
+    const result = await ActionsApi.list(query)
+    const items = Array.isArray(result?.items) ? result.items : []
+    actions.value = items.map(mapAction)
+  } catch (error) {
+    ElMessage.error(`加载动作列表失败：${error?.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+  }
+}
+
+function handleSearch() {
+  void loadActions()
+}
 
 function handleReset() {
   filters.status = ''
   filters.actionType = ''
   filters.dateRange = []
+  void loadActions()
 }
 
 function goDetail(row) {
@@ -146,24 +177,33 @@ function goDetail(row) {
 }
 
 function canRollback(row) {
-  return row.status === 'success' && row.supportRollback && !row.rolledBack
+  return row.status === 'success' && row.actionType !== 'rollback'
 }
 
-function rollback(row) {
+async function rollback(row) {
   if (!canRollback(row)) return
-  row.status = 'rolled_back'
-  row.result = '已执行回滚操作（假数据）'
-  ElMessage.success(`已对动作 ${row.id} 触发回滚（假操作）`)
+  loading.value = true
+  try {
+    await ActionsApi.rollback(row.id, {
+      actor: 'frontend-user',
+      reason: 'rollback from ui',
+    })
+    ElMessage.success(`已对动作 ${row.id} 触发回滚`)
+    await loadActions()
+  } catch (error) {
+    ElMessage.error(`回滚失败：${error?.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+  }
 }
 
 function statusLabel(status) {
   switch (status) {
     case 'pending':
       return '待执行'
-    case 'running':
-      return '执行中'
     case 'success':
       return '已完成'
+    case 'fail':
     case 'failed':
       return '已失败'
     case 'rolled_back':
@@ -177,10 +217,9 @@ function statusTagType(status) {
   switch (status) {
     case 'pending':
       return 'info'
-    case 'running':
-      return 'warning'
     case 'success':
       return 'success'
+    case 'fail':
     case 'failed':
       return 'danger'
     case 'rolled_back':
@@ -190,47 +229,56 @@ function statusTagType(status) {
   }
 }
 
-function createMockActions() {
-  const today = new Date()
-  const pad = (n) => (n < 10 ? `0${n}` : n)
-
-  const types = [
-    { key: 'block-ip', label: '封禁 IP' },
-    { key: 'update-rule', label: '修改规则' },
-    { key: 'rollback', label: '回滚配置' },
-    { key: 'rate-limit', label: '限流' },
-  ]
-  const statuses = ['pending', 'running', 'success', 'failed', 'success']
-
-  const list = []
-  for (let i = 1; i <= 24; i += 1) {
-    const day = new Date(today.getTime() - (i % 5) * 24 * 60 * 60 * 1000)
-    const date = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`
-    const time = `${date} ${pad(10 + (i % 6))}:${pad((i * 4) % 60)}:${pad((i * 9) % 60)}`
-    const type = types[i % types.length]
-    const status = statuses[i % statuses.length]
-
-    list.push({
-      id: `ACT-${20240000 + i}`,
-      incidentId: `INC-${20240001 + (i % 12)}`,
-      actionType: type.key,
-      typeLabel: type.label,
-      executedAt: time,
-      date,
-      status,
-      result:
-        status === 'success'
-          ? '执行成功，已同步到下游系统。'
-          : status === 'failed'
-            ? '执行失败，等待人工排查。'
-            : '任务排队或执行中。',
-      supportRollback: type.key !== 'rate-limit',
-      rolledBack: false,
-    })
-  }
-
-  return list
+function formatDateTime(value) {
+  if (!value) return '-'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  return d.toLocaleString('zh-CN', { hour12: false })
 }
+
+function toDateOnly(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function actionTypeLabel(actionType) {
+  switch (actionType) {
+    case 'block':
+      return '封禁'
+    case 'challenge':
+      return '挑战'
+    case 'rollback':
+      return '回滚'
+    case 'rate_limit':
+      return '限流'
+    default:
+      return actionType || '-'
+  }
+}
+
+function mapAction(item) {
+  const normalizedResult = item.result === 'fail' ? 'failed' : item.result
+  const status = item.action_type === 'rollback' && normalizedResult === 'success' ? 'rolled_back' : normalizedResult
+  return {
+    id: item.id,
+    incidentId: item.incident_id,
+    actionType: item.action_type,
+    typeLabel: actionTypeLabel(item.action_type),
+    executedAt: formatDateTime(item.executed_at || item.created_at),
+    date: toDateOnly(item.executed_at || item.created_at),
+    status,
+    result: item.detail || (status === 'success' ? '执行成功' : status === 'pending' ? '排队中' : '执行失败'),
+  }
+}
+
+onMounted(() => {
+  void loadActions()
+})
 </script>
 
 <style scoped>

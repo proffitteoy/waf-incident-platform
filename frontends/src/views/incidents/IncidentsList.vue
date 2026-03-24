@@ -50,9 +50,7 @@
             clearable
             style="width: 160px"
           >
-            <el-option label="WAF - Web 应用防火墙" value="waf-web" />
-            <el-option label="WAF - API 网关" value="waf-api" />
-            <el-option label="WAF - Edge/CDN" value="waf-edge" />
+            <el-option label="事件引擎" value="backend" />
           </el-select>
         </el-form-item>
         <el-form-item label="搜索">
@@ -102,7 +100,7 @@
         </div>
         <div class="right">
           <span class="muted">
-            当前展示 {{ filteredIncidents.length }} 条事件（假数据演示，后续接入 API）
+            当前展示 {{ filteredIncidents.length }} 条事件（实时数据）
           </span>
         </div>
       </div>
@@ -227,10 +225,11 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Cpu, Download, Search } from '@element-plus/icons-vue'
+import { IncidentsApi } from '../../api/incidents'
 
 const router = useRouter()
 
@@ -249,7 +248,7 @@ const pagination = reactive({
   pageSize: 10,
 })
 
-const allIncidents = ref(generateMockIncidents())
+const allIncidents = ref([])
 
 const filteredIncidents = computed(() => {
   const { dateRange, riskLevel, status, source, keyword } = filters
@@ -286,6 +285,7 @@ const multipleSelection = ref([])
 
 function handleSearch() {
   pagination.currentPage = 1
+  void loadIncidents()
 }
 
 function handleReset() {
@@ -295,37 +295,62 @@ function handleReset() {
   filters.source = ''
   filters.keyword = ''
   pagination.currentPage = 1
+  void loadIncidents()
 }
 
 function handleSelectionChange(selection) {
   multipleSelection.value = selection
 }
 
-function handleBulkAnalyze() {
+async function handleBulkAnalyze() {
   if (!multipleSelection.value.length) return
-  const ids = multipleSelection.value.map((i) => i.id).join(', ')
-  ElMessage.success(`已触发对 ${multipleSelection.value.length} 个事件的分析（假操作）：${ids}`)
+  try {
+    const targets = [...new Set(multipleSelection.value.map((item) => item.sourceIp).filter(Boolean))]
+    const results = await Promise.allSettled(
+      targets.map((srcIp) =>
+        IncidentsApi.analyzeEvents({
+          src_ip: srcIp,
+          limit: 100,
+          requested_by: 'frontend-user',
+        })
+      )
+    )
+    const successCount = results.filter((result) => result.status === 'fulfilled').length
+    ElMessage.success(`已触发 ${successCount}/${targets.length} 个来源 IP 的分析任务`)
+  } catch (error) {
+    ElMessage.error(`批量分析触发失败：${error?.message || '未知错误'}`)
+  }
 }
 
 function handleBulkExport() {
   if (!multipleSelection.value.length) return
-  ElMessage.info(`已导出 ${multipleSelection.value.length} 条事件（假操作，后续接入导出 API）`)
+  ElMessage.info(`已导出 ${multipleSelection.value.length} 条事件（导出 API 暂未接入）`)
 }
 
 function goDetail(row) {
   router.push({ name: 'incident-detail', params: { id: row.id } })
 }
 
-function triggerAnalyze(row) {
+async function triggerAnalyze(row) {
   row.llmStatus = 'running'
-  ElMessage.success(`已触发事件 ${row.id} 的 LLM 分析（假操作）`)
-  // 模拟几秒后完成可在接入真实 API 时由后端状态驱动，这里保持为 running
+  try {
+    await IncidentsApi.analyzeEvents({
+      src_ip: row.sourceIp,
+      limit: 100,
+      requested_by: 'frontend-user',
+    })
+    ElMessage.success(`已触发事件 ${row.id} 的 LLM 分析`)
+  } catch (error) {
+    row.llmStatus = 'failed'
+    ElMessage.error(`触发分析失败：${error?.message || '未知错误'}`)
+  }
 }
 
 function riskLabel(level) {
   switch (level) {
     case 'high':
       return '高'
+    case 'med':
     case 'medium':
       return '中'
     case 'low':
@@ -339,6 +364,7 @@ function riskTagType(level) {
   switch (level) {
     case 'high':
       return 'danger'
+    case 'med':
     case 'medium':
       return 'warning'
     case 'low':
@@ -408,46 +434,84 @@ function llmTagType(status) {
   }
 }
 
-function generateMockIncidents() {
-  const sources = [
-    { key: 'waf-web', label: 'WAF - Web 应用防火墙' },
-    { key: 'waf-api', label: 'WAF - API 网关' },
-    { key: 'waf-edge', label: 'WAF - Edge/CDN' },
-  ]
-  const riskLevels = ['high', 'medium', 'low']
-  const statuses = ['pending', 'analyzed', 'handled', 'closed']
-  const llmStatuses = ['not_started', 'running', 'completed']
-
-  const today = new Date()
-  const pad = (n) => (n < 10 ? `0${n}` : n)
-
-  const list = []
-  for (let i = 1; i <= 32; i += 1) {
-    const day = new Date(today.getTime() - (i % 7) * 24 * 60 * 60 * 1000)
-    const date = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`
-    const time = `${date} ${pad(8 + (i % 10))}:${pad((i * 7) % 60)}:${pad((i * 13) % 60)}`
-    const source = sources[i % sources.length]
-
-    const riskLevel = riskLevels[i % riskLevels.length]
-    const status = statuses[i % statuses.length]
-    const llmStatus = llmStatuses[i % llmStatuses.length]
-
-    list.push({
-      id: `INC-${20240000 + i}`,
-      date,
-      time,
-      sourceIp: `192.168.${i % 10}.${(i * 3) % 255}`,
-      url: `/api/v1/resource/${i}`,
-      method: i % 2 === 0 ? 'GET' : 'POST',
-      riskLevel,
-      status,
-      llmStatus,
-      source: source.label,
-      sourceKey: source.key,
-    })
-  }
-  return list
+function formatDateTime(value) {
+  if (!value) return '-'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  return d.toLocaleString('zh-CN', { hour12: false })
 }
+
+function toDateOnly(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function mapSeverityToUi(value) {
+  if (value === 'med') return 'medium'
+  return value || 'low'
+}
+
+function mapStatusToUi(value) {
+  if (value === 'open') return 'pending'
+  if (value === 'mitigating') return 'handled'
+  if (value === 'resolved') return 'closed'
+  return value || 'pending'
+}
+
+function statusToApi(value) {
+  if (value === 'pending') return 'open'
+  if (value === 'analyzed' || value === 'handled') return 'mitigating'
+  if (value === 'closed') return 'resolved'
+  return undefined
+}
+
+function severityToApi(value) {
+  if (value === 'medium') return 'med'
+  return value || undefined
+}
+
+async function loadIncidents() {
+  loading.value = true
+  try {
+    const result = await IncidentsApi.list({
+      limit: 300,
+      offset: 0,
+      status: statusToApi(filters.status),
+      severity: severityToApi(filters.riskLevel),
+    })
+
+    const items = Array.isArray(result?.items) ? result.items : []
+    allIncidents.value = items.map((item) => {
+      const ts = item.last_seen || item.created_at
+      return {
+        id: item.id,
+        date: toDateOnly(ts),
+        time: formatDateTime(ts),
+        sourceIp: item.src_ip || '-',
+        url: item.summary || item.title || '',
+        method: '-',
+        riskLevel: mapSeverityToUi(item.severity),
+        status: mapStatusToUi(item.status),
+        llmStatus: 'not_started',
+        source: '事件引擎',
+        sourceKey: 'backend',
+      }
+    })
+  } catch (error) {
+    ElMessage.error(`加载事件列表失败：${error?.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  void loadIncidents()
+})
 </script>
 
 <style scoped>

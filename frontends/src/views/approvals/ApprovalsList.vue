@@ -72,7 +72,7 @@
         </div>
         <div class="right">
           <span class="muted">
-            当前展示 {{ filteredApprovals.length }} 条审批（假数据，后续接入 /api/approvals）
+            当前展示 {{ filteredApprovals.length }} 条审批（实时数据）
           </span>
         </div>
       </div>
@@ -160,9 +160,10 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { ApprovalsApi } from '../../api/approvals'
 
 const router = useRouter()
 
@@ -177,7 +178,8 @@ const pagination = reactive({
   pageSize: 10,
 })
 
-const allApprovals = ref(generateMockApprovals())
+const loading = ref(false)
+const allApprovals = ref([])
 
 const filteredApprovals = computed(() => {
   const { status, riskLevel, dateRange } = filters
@@ -205,6 +207,7 @@ const multipleSelection = ref([])
 
 function handleSearch() {
   pagination.currentPage = 1
+  void loadApprovals()
 }
 
 function handleReset() {
@@ -212,48 +215,100 @@ function handleReset() {
   filters.riskLevel = ''
   filters.dateRange = []
   pagination.currentPage = 1
+  void loadApprovals()
 }
 
 function handleSelectionChange(selection) {
   multipleSelection.value = selection
 }
 
-function handleBulkApprove() {
+async function handleBulkApprove() {
   if (!multipleSelection.value.length) return
-  multipleSelection.value.forEach((item) => {
-    if (item.status === 'pending') item.status = 'approved'
-  })
-  ElMessage.success(`已批量通过 ${multipleSelection.value.length} 条审批（假操作）`)
+  loading.value = true
+  try {
+    const pendingItems = multipleSelection.value.filter((item) => item.status === 'pending')
+    await Promise.all(
+      pendingItems.map((item) =>
+        ApprovalsApi.approve(item.id, {
+          reviewer: 'frontend-user',
+          comment: 'bulk approve from ui',
+        })
+      )
+    )
+    ElMessage.success(`已批量通过 ${pendingItems.length} 条审批`)
+    await loadApprovals()
+  } catch (error) {
+    ElMessage.error(`批量通过失败：${error?.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+  }
 }
 
-function handleBulkReject() {
+async function handleBulkReject() {
   if (!multipleSelection.value.length) return
-  multipleSelection.value.forEach((item) => {
-    if (item.status === 'pending') item.status = 'rejected'
-  })
-  ElMessage.warning(`已批量拒绝 ${multipleSelection.value.length} 条审批（假操作）`)
+  loading.value = true
+  try {
+    const pendingItems = multipleSelection.value.filter((item) => item.status === 'pending')
+    await Promise.all(
+      pendingItems.map((item) =>
+        ApprovalsApi.reject(item.id, {
+          reviewer: 'frontend-user',
+          comment: 'bulk reject from ui',
+        })
+      )
+    )
+    ElMessage.warning(`已批量拒绝 ${pendingItems.length} 条审批`)
+    await loadApprovals()
+  } catch (error) {
+    ElMessage.error(`批量拒绝失败：${error?.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+  }
 }
 
 function goDetail(row) {
   router.push({ name: 'approval-detail', params: { id: row.id } })
 }
 
-function approve(row) {
+async function approve(row) {
   if (row.status !== 'pending') return
-  row.status = 'approved'
-  ElMessage.success(`审批 ${row.id} 已通过（假操作）`)
+  loading.value = true
+  try {
+    await ApprovalsApi.approve(row.id, {
+      reviewer: 'frontend-user',
+      comment: 'approve from ui',
+    })
+    ElMessage.success(`审批 ${row.id} 已通过`)
+    await loadApprovals()
+  } catch (error) {
+    ElMessage.error(`审批通过失败：${error?.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+  }
 }
 
-function reject(row) {
+async function reject(row) {
   if (row.status !== 'pending') return
-  row.status = 'rejected'
-  ElMessage.error(`审批 ${row.id} 已拒绝（假操作）`)
+  loading.value = true
+  try {
+    await ApprovalsApi.reject(row.id, {
+      reviewer: 'frontend-user',
+      comment: 'reject from ui',
+    })
+    ElMessage.error(`审批 ${row.id} 已拒绝`)
+    await loadApprovals()
+  } catch (error) {
+    ElMessage.error(`审批拒绝失败：${error?.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+  }
 }
 
 function riskLabel(level) {
   switch (level) {
     case 'high':
       return '高'
+    case 'med':
     case 'medium':
       return '中'
     case 'low':
@@ -267,6 +322,7 @@ function riskTagType(level) {
   switch (level) {
     case 'high':
       return 'danger'
+    case 'med':
     case 'medium':
       return 'warning'
     case 'low':
@@ -302,37 +358,66 @@ function statusTagType(status) {
   }
 }
 
-function generateMockApprovals() {
-  const today = new Date()
-  const pad = (n) => (n < 10 ? `0${n}` : n)
-  const riskLevels = ['high', 'medium', 'low']
-  const statuses = ['pending', 'approved', 'rejected']
-  const actionTypes = ['封禁 IP', '修改规则', '回滚配置', '限流策略']
-  const requesters = ['SOC-A', 'SOC-B', 'SOC-C']
-
-  const list = []
-  for (let i = 1; i <= 24; i += 1) {
-    const day = new Date(today.getTime() - (i % 7) * 24 * 60 * 60 * 1000)
-    const date = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`
-    const time = `${date} ${pad(9 + (i % 8))}:${pad((i * 3) % 60)}:${pad((i * 11) % 60)}`
-
-    const riskLevel = riskLevels[i % riskLevels.length]
-    const status = statuses[i % statuses.length]
-
-    list.push({
-      id: `APR-${20240000 + i}`,
-      incidentId: `INC-${20240010 + (i % 10)}`,
-      actionType: actionTypes[i % actionTypes.length],
-      riskLevel,
-      requestedAt: time,
-      date,
-      requester: requesters[i % requesters.length],
-      status,
-    })
-  }
-
-  return list
+const formatDateTime = (value) => {
+  if (!value) return '-'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  return d.toLocaleString('zh-CN', { hour12: false })
 }
+
+const toDateOnly = (value) => {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const actionTypeLabel = (actionType) => {
+  if (actionType === 'block') return '封禁'
+  if (actionType === 'rate_limit') return '限流'
+  if (actionType === 'challenge') return '挑战'
+  if (actionType === 'rollback') return '回滚'
+  return actionType || '-'
+}
+
+const normalizeRiskLevel = (value) => {
+  if (value === 'med') return 'medium'
+  return value || 'low'
+}
+
+async function loadApprovals() {
+  loading.value = true
+  try {
+    const statusList = filters.status ? [filters.status] : ['pending', 'approved', 'rejected']
+    const resultList = await Promise.all(statusList.map((status) => ApprovalsApi.list({ status })))
+    const items = resultList.flatMap((result) => (Array.isArray(result?.items) ? result.items : []))
+
+    allApprovals.value = items.map((item) => {
+      const draft = item.action_draft || {}
+      return {
+        id: item.id,
+        incidentId: item.incident_id,
+        actionType: actionTypeLabel(draft.action_type),
+        riskLevel: normalizeRiskLevel(item.risk_level),
+        requestedAt: formatDateTime(item.created_at),
+        date: toDateOnly(item.created_at),
+        requester: item.requested_by || '-',
+        status: item.status,
+      }
+    })
+  } catch (error) {
+    ElMessage.error(`加载审批列表失败：${error?.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  void loadApprovals()
+})
 </script>
 
 <style scoped>

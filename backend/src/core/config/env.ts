@@ -65,7 +65,7 @@ const envSchema = z.object({
   LLM_CIRCUIT_BREAKER_THRESHOLD: z.coerce.number().int().positive().default(3),
   LLM_CIRCUIT_BREAKER_COOLDOWN_MS: z.coerce.number().int().positive().default(30000),
   LLM_FALLBACK_MODE: z.enum(["disabled", "deterministic"]).default("deterministic"),
-  AUTO_ANALYZE_ON_INGEST: booleanFromEnv.default(false),
+  AUTO_ANALYZE_ON_INGEST: booleanFromEnv.default(true),
   AUTO_ANALYZE_ACTOR: z.string().min(1).default("ingestion-auto"),
   ACTION_VERIFY_ENABLED: booleanFromEnv.default(true),
   WAF_PROBE_BASE_URL: z.string().url().default("http://waf"),
