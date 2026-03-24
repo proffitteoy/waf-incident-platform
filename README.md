@@ -46,21 +46,6 @@ waf-incident-platform/
 
 ## 前置依赖条件
 
-### 本地开发模式（backend/frontend 在宿主机运行）
-
-必需条件：
-
-1. Windows PowerShell 5.1+（用于执行 scripts 目录下脚本）。
-2. Node.js 20+ 与 npm（用于运行 backend 与 frontends）。
-3. Docker Desktop 已运行（用于启动 postgres 与 redis 依赖容器）。
-4. 已准备 backend/.env（可由 backend/.env.example 复制）。
-
-端口要求：
-
-1. 3000（后端 API）。
-2. 5173（前端 Vite）。
-3. 55432（PostgreSQL 宿主机映射端口）。
-4. 6379（Redis）。
 
 建议先检查：
 
@@ -91,20 +76,6 @@ waf-incident-platform/
 - 本地开发模式建议仅启动 postgres 与 redis 容器，再在宿主机启动 backend/frontend。
 - Docker 部署模式会同时启动 frontend/backend/waf/forensics-worker，前端代理目标为容器内 backend:3000。
 
-## 快速启动（本地开发）
-
-1. 复制后端环境变量模板：`copy backend\\.env.example backend\\.env`
-2. 启动依赖：`docker compose up -d postgres redis`
-   - 说明：为避免与本机 PostgreSQL 冲突，Compose 将 PostgreSQL 映射到宿主机 `55432` 端口。
-   - 本地运行后端时，请确保 `backend/.env` 中 `POSTGRES_PORT=55432`。
-3. 启动后端：
-   - `cd backend`
-   - `npm.cmd install`
-   - `npm.cmd run dev`
-4. 可选启动前端：
-   - `cd frontends`
-   - `npm.cmd install`
-   - `npm.cmd run dev`
 
 ## Docker Compose 部署（全容器）
 
@@ -126,7 +97,6 @@ waf-incident-platform/
 访问入口：
 - 前端：http://localhost:5173
 - 后端 API：http://localhost:3000
-- WAF 网关：http://localhost:80
 
 停止与清理：
 - 停止容器：`docker compose down`
@@ -139,7 +109,8 @@ waf-incident-platform/
    - `node replay.js tests/logs/sqli.log`
 2. 运行单元测试：
    - `npm.cmd test`
-
+3. web-test:
+   - web-test文件夹内是用于测试的目标网站，具体的攻击命令和测试方法写在该文件夹下的readme.md
 ## 文档索引
 
 - 项目目标与约束：`docs/技术细节.md`、`docs/强前置条件约束.md`
