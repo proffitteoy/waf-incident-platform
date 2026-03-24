@@ -46,21 +46,6 @@ waf-incident-platform/
 
 ## 前置依赖条件
 
-### 本地开发模式（backend/frontend 在宿主机运行）
-
-必需条件：
-
-1. Windows PowerShell 5.1+（用于执行 scripts 目录下脚本）。
-2. Node.js 20+ 与 npm（用于运行 backend 与 frontends）。
-3. Docker Desktop 已运行（用于启动 postgres 与 redis 依赖容器）。
-4. 已准备 backend/.env（可由 backend/.env.example 复制）。
-
-端口要求：
-
-1. 3000（后端 API）。
-2. 5173（前端 Vite）。
-3. 55432（PostgreSQL 宿主机映射端口）。
-4. 6379（Redis）。
 
 建议先检查：
 
@@ -91,39 +76,27 @@ waf-incident-platform/
 - 本地开发模式建议仅启动 postgres 与 redis 容器，再在宿主机启动 backend/frontend。
 - Docker 部署模式会同时启动 frontend/backend/waf/forensics-worker，前端代理目标为容器内 backend:3000。
 
-## 快速启动（本地开发）
-
-1. 复制后端环境变量模板：`copy backend\\.env.example backend\\.env`
-2. 启动依赖：`docker compose up -d postgres redis`
-   - 说明：为避免与本机 PostgreSQL 冲突，Compose 将 PostgreSQL 映射到宿主机 `55432` 端口。
-   - 本地运行后端时，请确保 `backend/.env` 中 `POSTGRES_PORT=55432`。
-3. 启动后端：
-   - `cd backend`
-   - `npm.cmd install`
-   - `npm.cmd run dev`
-4. 可选启动前端：
-   - `cd frontends`
-   - `npm.cmd install`
-   - `npm.cmd run dev`
 
 ## Docker Compose 部署（全容器）
 
-适用于联调、演示或验收环境，一条命令启动完整服务栈（postgres/redis/backend/frontend/waf/forensics-worker）。
+适用于联调、演示或验收环境，一条命令启动完整服务栈（postgres/redis/backend/frontend/waf/forensics-worker/ingestion-worker）。
 
 需要在包含 docker-compose.yml目录下运行
 1. 复制后端环境变量模板：`copy backend\\.env.example backend\\.env`
-2. 建议先做启动前检查：`powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\check-preflight.ps1`
-3. 全量启动（含构建，首次或变更镜像使用）：`docker compose up -d --build`
-4. 查看服务状态：`docker compose ps`
-5. 查看后端日志（可选）：`docker compose logs -f backend`
+2. 在 `backend/.env` 中填写目标防御网站：
+   - `WEBSITE_URL=http://host.docker.internal:8080`（示例）
+   - 若要防护其他站点，替换为实际上游地址（如 `http://example.internal:8080`）。
+   - `waf` 服务会通过 `env_file: ./backend/.env` 注入该变量，`infrastructure/nginx/nginx.conf` 使用 `WEBSITE_URL` 作为反向代理上游。
+3. 建议先做启动前检查：`powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\check-preflight.ps1`
+4. 全量启动（含构建，首次或变更镜像使用）：`docker compose up -d --build`
+5. 查看服务状态：`docker compose ps`
+6. 查看后端与自动入库 worker 日志（可选）：`docker compose logs -f backend ingestion-worker`
 
-6.首次成功后，日常启动不要每次都带 --build，
-用 docker compose up -d
+7. 首次成功后，日常启动不要每次都带 `--build`，使用：`docker compose up -d`
 
 访问入口：
 - 前端：http://localhost:5173
 - 后端 API：http://localhost:3000
-- WAF 网关：http://localhost:80
 
 停止与清理：
 - 停止容器：`docker compose down`
@@ -136,7 +109,8 @@ waf-incident-platform/
    - `node replay.js tests/logs/sqli.log`
 2. 运行单元测试：
    - `npm.cmd test`
-
+3. web-test:
+   - web-test文件夹内是用于测试的目标网站，具体的攻击命令和测试方法写在该文件夹下的readme.md
 ## 文档索引
 
 - 项目目标与约束：`docs/技术细节.md`、`docs/强前置条件约束.md`

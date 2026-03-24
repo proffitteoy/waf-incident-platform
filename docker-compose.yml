@@ -58,6 +58,33 @@
     networks:
       - waf-net
 
+  # 自动入库 Worker：持续 tail waf-audit.log 并调用后端 ingestion API
+  ingestion-worker:
+    image: node:20-alpine
+    container_name: waf-ingestion-worker
+    working_dir: /app
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./storage/logs:/app/storage/logs
+    env_file:
+      - ./backend/.env
+    environment:
+      - BACKEND_API_URL=http://backend:3000
+      - WAF_AUDIT_LOG_PATH=/app/storage/logs/waf-audit.log
+      - WAF_AUDIT_OFFSET_PATH=/app/storage/logs/waf-audit.offset
+      - INGESTION_API_URL=http://backend:3000/api/ingestion/coraza/audit-lines
+      - INGESTION_POLL_INTERVAL_MS=2000
+      - INGESTION_BATCH_LINES=50
+      - INGESTION_REQUEST_TIMEOUT_MS=10000
+      - INGESTION_RETRY_MAX=3
+    command: sh -c "if [ ! -x node_modules/.bin/ts-node-dev ]; then npm install; fi && npm run worker:ingestion"
+    depends_on:
+      - backend
+    networks:
+      - waf-net
+
   # 前端服务：仪表盘可视化
   frontend:
     image: node:20-alpine
@@ -81,11 +108,12 @@
       dockerfile: Dockerfile
     container_name: waf-gateway
     restart: always
+    env_file:
+      - ./backend/.env
     ports:
       - "80:80"
     environment:
-      # 目标网站地址
-      - WEBSITE_URL=http://host.docker.internal:8080
+      # 目标网站地址由 ./backend/.env 的 WEBSITE_URL 提供
       # Redis 连接配置 (供 Lua 脚本使用)
       - REDIS_HOST=redis
       - REDIS_PORT=6379
