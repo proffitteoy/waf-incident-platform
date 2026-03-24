@@ -5,10 +5,6 @@ export const ApprovalsApi = {
     return request('/approvals', { query: params })
   },
 
-  detail(id) {
-    return request(`/approvals/${id}`)
-  },
-
   approve(id, payload) {
     return request(`/approvals/${id}/approve`, {
       method: 'POST',
@@ -22,12 +18,4 @@ export const ApprovalsApi = {
       body: payload ? JSON.stringify(payload) : undefined,
     })
   },
-
-  batchDecide(payload) {
-    return request('/approvals/batch', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
-  },
 }
-
