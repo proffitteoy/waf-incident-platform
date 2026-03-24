@@ -27,7 +27,7 @@ npm test
 ### 1) SQL 注入
 
 ```bash
-curl -i -X POST "http://127.0.0.1:8080/api/auth/login" \
+curl -i -X POST "http://127.0.0.1:80/api/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"admin'"'"' OR '"'"'1'"'"'='"'"'1","password":"demo"}'
 ```
@@ -35,13 +35,13 @@ curl -i -X POST "http://127.0.0.1:8080/api/auth/login" \
 ### 2) XSS
 
 ```bash
-curl -i "http://127.0.0.1:8080/search?q=%3Cscript%3Ealert(1)%3C/script%3E"
+curl -i "http://127.0.0.1:80/search?q=%3Cscript%3Ealert(1)%3C/script%3E"
 ```
 
 ### 3) 命令注入探测
 
 ```bash
-curl -i -X POST "http://127.0.0.1:8080/api/tools/ping-preview" \
+curl -i -X POST "http://127.0.0.1:80/api/tools/ping-preview" \
   -H "Content-Type: application/json" \
   -d '{"host":"8.8.8.8;cat /etc/passwd"}'
 ```
@@ -49,7 +49,7 @@ curl -i -X POST "http://127.0.0.1:8080/api/tools/ping-preview" \
 ### 4) 路径穿越探测（附加）
 
 ```bash
-curl -i "http://127.0.0.1:8080/legacy/download?name=../../etc/passwd"
+curl -i "http://127.0.0.1:80/legacy/download?name=../../etc/passwd"
 ```
 
 ## 发布门禁建议

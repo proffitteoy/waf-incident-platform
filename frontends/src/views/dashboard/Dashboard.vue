@@ -133,28 +133,26 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { DashboardApi } from '../../api/dashboard'
 
 const router = useRouter()
 
 let echarts
-// 延迟加载 ECharts，避免在 SSR 或测试环境报错
-onMounted(async () => {
-  if (!echarts) {
-    const mod = await import('echarts')
-    echarts = mod.default || mod
-  }
-  initCharts()
-})
 
-onBeforeUnmount(() => {
-  disposeCharts()
-})
+const POLL_INTERVAL_MS = 5000
+const dashboardLoading = ref(false)
+const dashboardError = ref('')
+let pollingTimer = null
+const resizeHandler = () => {
+  if (trendChartInstance) trendChartInstance.resize()
+  if (riskChartInstance) riskChartInstance.resize()
+}
 
 const statCards = ref([
-  { key: 'today', label: '今日事件总数', value: 128, trendType: 'up', trendPrefix: '+', trendValue: '12.5%', type: 'primary' },
-  { key: 'pending', label: '待处理事件', value: 34, trendType: 'up', trendPrefix: '+', trendValue: '5', type: 'warning' },
-  { key: 'high', label: '高风险事件', value: 9, trendType: 'flat', trendPrefix: '≈', trendValue: '昨日', type: 'danger' },
-  { key: 'approvals', label: '待审批动作', value: 6, trendType: 'down', trendPrefix: '-', trendValue: '2', type: 'info' },
+  { key: 'today', label: '近窗口请求总数', value: 0, trendType: 'flat', trendPrefix: '≈', trendValue: '实时', type: 'primary' },
+  { key: 'pending', label: 'WAF 命中事件', value: 0, trendType: 'flat', trendPrefix: '≈', trendValue: '实时', type: 'warning' },
+  { key: 'high', label: '拦截数量', value: 0, trendType: 'flat', trendPrefix: '≈', trendValue: '实时', type: 'danger' },
+  { key: 'approvals', label: '动作成功率', value: '0%', trendType: 'flat', trendPrefix: '≈', trendValue: '实时', type: 'info' },
 ])
 
 const trendRange = ref('7d')
@@ -164,44 +162,134 @@ const riskChartRef = ref(null)
 
 let trendChartInstance = null
 let riskChartInstance = null
+const trendSeries = ref({ labels: [], values: [] })
 
 const riskDistribution = ref([
-  { level: 'high', label: '高风险', value: 9 },
-  { level: 'medium', label: '中风险', value: 32 },
-  { level: 'low', label: '低风险', value: 87 },
+  { level: 'high', label: '高风险', value: 0 },
+  { level: 'medium', label: '中风险', value: 0 },
+  { level: 'low', label: '低风险', value: 0 },
 ])
 
-const recentIncidents = ref([
-  { id: 'INC-202503-0001', timestamp: '2025-03-09 14:32:10', source_ip: '192.168.0.12', risk_level: 'high', status: 'pending' },
-  { id: 'INC-202503-0002', timestamp: '2025-03-09 13:58:42', source_ip: '10.0.5.21', risk_level: 'medium', status: 'analyzed' },
-])
+const recentIncidents = ref([])
 
 const healthItems = ref([
   { key: 'postgres', label: 'PostgreSQL', status: 'ok', statusLabel: '运行正常' },
   { key: 'redis', label: 'Redis', status: 'ok', statusLabel: '运行正常' },
-  { key: 'llm', label: 'LLM 服务', status: 'warn', statusLabel: '延迟偏高' },
-  { key: 'ingestion', label: '日志采集', status: 'error', statusLabel: '采集异常' },
+  { key: 'llm', label: 'LLM 服务', status: 'warn', statusLabel: '状态未知' },
+  { key: 'ingestion', label: '日志采集', status: 'warn', statusLabel: '等待采集' },
 ])
 
 const riskLabel = (level) => (level === 'high' ? '高' : level === 'medium' ? '中' : '低')
 const riskTagType = (level) => (level === 'high' ? 'danger' : level === 'medium' ? 'warning' : 'success')
-const statusLabel = (status) => ({ pending: '待分析', analyzed: '已分析', processed: '已处理', closed: '已关闭' }[status] || status)
+const statusLabel = (status) => ({
+  pending: '待分析',
+  analyzed: '已分析',
+  processed: '已处理',
+  closed: '已关闭',
+  deny: '已拦截',
+  block: '已阻断',
+  monitor: '监控',
+  allow: '放行'
+}[status] || status || '-')
 
-const getTrendData = () => {
-  const days = trendRange.value === '7d' ? 7 : 30
-  const labels = []
-  const values = []
-  const base = new Date()
-  for (let i = days - 1; i >= 0; i -= 1) {
-    const d = new Date(base.getTime() - i * 24 * 60 * 60 * 1000)
-    const m = d.getMonth() + 1
-    const day = d.getDate()
-    labels.push(`${m}/${day}`)
-    // 简单的假数据：高风险波动更大
-    const baseVal = 20 + Math.round(Math.random() * 15)
-    values.push(baseVal + (i % 5 === 0 ? 15 : 0))
+const toRangeHours = () => (trendRange.value === '7d' ? 168 : 720)
+
+const formatTimestamp = (value) => {
+  if (!value) return '-'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  return d.toLocaleString('zh-CN', { hour12: false })
+}
+
+const classifyRisk = (ruleScore) => {
+  const score = Number(ruleScore || 0)
+  if (score >= 8) return 'high'
+  if (score >= 4) return 'medium'
+  return 'low'
+}
+
+const updateRiskDistribution = (events) => {
+  const counts = { high: 0, medium: 0, low: 0 }
+  events.forEach((event) => {
+    counts[classifyRisk(event.rule_score)] += 1
+  })
+
+  riskDistribution.value = [
+    { level: 'high', label: '高风险', value: counts.high },
+    { level: 'medium', label: '中风险', value: counts.medium },
+    { level: 'low', label: '低风险', value: counts.low },
+  ]
+}
+
+const applyOverview = (overview) => {
+  const summary = overview?.summary || {}
+  const actionStats = overview?.action_stats || {}
+  const totalActions = Number(actionStats.action_total || 0)
+  const successActions = Number(actionStats.action_success || 0)
+  const successRate = totalActions > 0 ? `${Math.round((successActions / totalActions) * 100)}%` : '0%'
+
+  statCards.value = [
+    { key: 'today', label: '近窗口请求总数', value: Number(summary.request_count || 0), trendType: 'flat', trendPrefix: '≈', trendValue: '实时', type: 'primary' },
+    { key: 'pending', label: 'WAF 命中事件', value: Number(summary.waf_hits || 0), trendType: 'flat', trendPrefix: '≈', trendValue: '实时', type: 'warning' },
+    { key: 'high', label: '拦截数量', value: Number(summary.blocked_count || 0), trendType: 'flat', trendPrefix: '≈', trendValue: '实时', type: 'danger' },
+    { key: 'approvals', label: '动作成功率', value: successRate, trendType: 'flat', trendPrefix: '≈', trendValue: '实时', type: 'info' },
+  ]
+}
+
+const applyTimeseries = (timeseries) => {
+  const series = Array.isArray(timeseries?.series) ? timeseries.series : []
+  trendSeries.value = {
+    labels: series.map((item) => formatTimestamp(item.bucket)),
+    values: series.map((item) => Number(item.value || 0)),
   }
-  return { labels, values }
+}
+
+const applyRecentEvents = (eventsResponse) => {
+  const items = Array.isArray(eventsResponse?.items) ? eventsResponse.items : []
+  recentIncidents.value = items.map((event) => ({
+    id: `EVT-${event.id}`,
+    timestamp: formatTimestamp(event.ts),
+    source_ip: event.src_ip || '-',
+    risk_level: classifyRisk(event.rule_score),
+    status: event.waf_action || 'observed',
+  }))
+  updateRiskDistribution(items)
+}
+
+const refreshDashboard = async () => {
+  dashboardLoading.value = true
+  dashboardError.value = ''
+  try {
+    const hours = toRangeHours()
+    const [overview, timeseries, events] = await Promise.all([
+      DashboardApi.overview({ range: hours }),
+      DashboardApi.timeseries({ metric: 'requests', range: hours }),
+      DashboardApi.latestEvents({ limit: 10, offset: 0 }),
+    ])
+
+    applyOverview(overview)
+    applyTimeseries(timeseries)
+    applyRecentEvents(events)
+
+    healthItems.value = [
+      { key: 'postgres', label: 'PostgreSQL', status: 'ok', statusLabel: '运行正常' },
+      { key: 'redis', label: 'Redis', status: 'ok', statusLabel: '运行正常' },
+      { key: 'llm', label: 'LLM 服务', status: 'warn', statusLabel: '状态未知' },
+      { key: 'ingestion', label: '日志采集', status: 'ok', statusLabel: '采集中' },
+    ]
+  } catch (error) {
+    dashboardError.value = error instanceof Error ? error.message : String(error)
+    healthItems.value = [
+      { key: 'postgres', label: 'PostgreSQL', status: 'warn', statusLabel: '状态未知' },
+      { key: 'redis', label: 'Redis', status: 'warn', statusLabel: '状态未知' },
+      { key: 'llm', label: 'LLM 服务', status: 'warn', statusLabel: '状态未知' },
+      { key: 'ingestion', label: '日志采集', status: 'error', statusLabel: '拉取失败' },
+    ]
+  } finally {
+    dashboardLoading.value = false
+    updateTrendChart()
+    updateRiskChart()
+  }
 }
 
 const initCharts = () => {
@@ -231,7 +319,8 @@ const disposeCharts = () => {
 
 const updateTrendChart = () => {
   if (!trendChartInstance) return
-  const { labels, values } = getTrendData()
+  const labels = trendSeries.value.labels.length > 0 ? trendSeries.value.labels : ['-']
+  const values = trendSeries.value.values.length > 0 ? trendSeries.value.values : [0]
   trendChartInstance.setOption({
     tooltip: { trigger: 'axis' },
     grid: { left: 40, right: 20, top: 30, bottom: 30 },
@@ -296,17 +385,33 @@ const updateRiskChart = () => {
 }
 
 watch(trendRange, () => {
-  updateTrendChart()
+  refreshDashboard()
 })
 
-// 如果主题切换导致容器尺寸变化，可在需要时手动调用 resize
-window.addEventListener('resize', () => {
-  if (trendChartInstance) trendChartInstance.resize()
-  if (riskChartInstance) riskChartInstance.resize()
+onMounted(async () => {
+  if (!echarts) {
+    const mod = await import('echarts')
+    echarts = mod.default || mod
+  }
+  initCharts()
+  await refreshDashboard()
+  pollingTimer = window.setInterval(refreshDashboard, POLL_INTERVAL_MS)
+  window.addEventListener('resize', resizeHandler)
+})
+
+onBeforeUnmount(() => {
+  if (pollingTimer) {
+    window.clearInterval(pollingTimer)
+    pollingTimer = null
+  }
+  window.removeEventListener('resize', resizeHandler)
+  disposeCharts()
 })
 
 const handleRowClick = (row) => {
-  router.push(`/incidents/${row.id}`)
+  if (row?.id) {
+    router.push('/incidents')
+  }
 }
 const goIncidents = () => router.push('/incidents')
 </script>
