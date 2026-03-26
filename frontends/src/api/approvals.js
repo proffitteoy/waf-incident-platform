@@ -1,6 +1,10 @@
 import { request } from './http'
 
 export const ApprovalsApi = {
+  detail(id) {
+    return request(`/approvals/${id}`)
+  },
+
   list(params) {
     return request('/approvals', { query: params })
   },
@@ -17,5 +21,9 @@ export const ApprovalsApi = {
       method: 'POST',
       body: payload ? JSON.stringify(payload) : undefined,
     })
+  },
+
+  remove(id) {
+    return request(`/approvals/${id}`, { method: 'DELETE' })
   },
 }

@@ -18,21 +18,6 @@
             />
           </el-button>
         </el-tooltip>
-        <el-dropdown>
-          <span class="user-entry">
-            <el-avatar size="small" class="avatar">
-              {{ userInitial }}
-            </el-avatar>
-            <span class="name">{{ userName }}</span>
-            <el-icon><ArrowDown /></el-icon>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item disabled>角色：{{ roleLabel }}</el-dropdown-item>
-              <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
       </div>
     </header>
 
@@ -86,7 +71,9 @@
               <el-icon><Icon icon="solar:settings-bold-duotone" /></el-icon>
               <span>策略配置</span>
             </template>
-            <el-menu-item index="/policies">策略列表</el-menu-item>
+            <el-menu-item index="/policies">风险阈值策略</el-menu-item>
+            <el-menu-item index="/policies/ip-whitelist">IP 白名单</el-menu-item>
+            <el-menu-item index="/policies/geo-block">地区封禁</el-menu-item>
           </el-sub-menu>
 
           <el-sub-menu index="/forensics">
@@ -97,11 +84,6 @@
             <el-menu-item index="/forensics">取证任务</el-menu-item>
             <el-menu-item index="/forensics/new">新建取证任务</el-menu-item>
           </el-sub-menu>
-
-          <el-menu-item index="/admin/permissions">
-            <el-icon><Icon icon="solar:shield-keyhole-bold-duotone" /></el-icon>
-            <span>权限管理</span>
-          </el-menu-item>
 
           <el-sub-menu index="/settings">
             <template #title>
@@ -125,9 +107,8 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
 import { Icon } from '@iconify/vue'
-import { ArrowDown, Document } from '@element-plus/icons-vue'
+import { Document } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -169,32 +150,12 @@ const activeMenu = computed(() => {
   if (path.startsWith('/actions')) return '/actions'
   if (path.startsWith('/policies')) return '/policies'
   if (path.startsWith('/forensics')) return '/forensics'
-  if (path.startsWith('/admin/permissions')) return '/admin/permissions'
   if (path.startsWith('/settings')) return '/settings'
   return '/dashboard'
 })
 
-const userName = computed(() => sessionStorage.getItem('nickName') || 'Operator')
-const userInitial = computed(() => userName.value.charAt(0).toUpperCase())
-const role = computed(() => sessionStorage.getItem('role') || 'user')
-const roleLabel = computed(() => (role.value === 'admin' ? '管理员' : '普通用户'))
-
 const goDashboard = () => {
   router.push('/dashboard')
-}
-
-const logout = async () => {
-  try {
-    await ElMessageBox.confirm('确定要退出登录吗？', '退出登录', {
-      type: 'warning',
-      confirmButtonText: '退出',
-      cancelButtonText: '取消',
-    })
-  } catch {
-    return
-  }
-  sessionStorage.clear()
-  router.push('/login')
 }
 </script>
 
@@ -241,21 +202,6 @@ const logout = async () => {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.user-entry {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  color: var(--text-color);
-}
-.avatar {
-  background: #f97316;
-  font-size: 12px;
-}
-.name {
-  font-size: 13px;
 }
 
 .layout-main {

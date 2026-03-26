@@ -43,6 +43,22 @@ const rollbackSchema = z.object({
 export const actionsRouter = Router();
 
 actionsRouter.get(
+  "/actions/:id",
+  asyncHandler(async (req, res) => {
+    const result = await query(
+      `SELECT id, incident_id, approval_id, action_type, scope, target, ttl_seconds,
+              requested_by, executed_by, result, detail, rollback_token, created_at, executed_at
+       FROM actions WHERE id = $1 LIMIT 1`,
+      [req.params.id]
+    );
+    if (result.rowCount === 0) {
+      throw new HttpError(404, "action not found");
+    }
+    res.json(result.rows[0]);
+  })
+);
+
+actionsRouter.get(
   "/actions",
   asyncHandler(async (req, res) => {
     const limit = parseLimit(req.query.limit as string | undefined, 100);

@@ -10,9 +10,9 @@
         <el-form-item label="关联事件 ID">
           <el-input
             v-model="filters.incidentId"
-            placeholder="例如：INC-20240001"
+            placeholder="输入事件 ID 关键字"
             clearable
-            style="width: 220px"
+            style="width: 280px"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
@@ -26,91 +26,45 @@
             value-format="YYYY-MM-DD"
           />
         </el-form-item>
-        <el-form-item label="模型版本">
-          <el-select
-            v-model="filters.modelVersion"
-            placeholder="全部"
-            clearable
-            style="width: 180px"
-          >
-            <el-option label="llm-sec-1.0" value="llm-sec-1.0" />
-            <el-option label="llm-sec-1.1" value="llm-sec-1.1" />
-            <el-option label="llm-sec-2.0" value="llm-sec-2.0" />
-          </el-select>
-        </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">
-            查询
-          </el-button>
-          <el-button @click="handleReset">
-            重置
-          </el-button>
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
     <el-card class="table-card" shadow="never">
       <div class="table-toolbar">
-        <div class="left">
-          <span class="muted">
-            当前展示 {{ filteredReports.length }} 条报告（假数据，后续接入 /api/llm-reports）
-          </span>
-        </div>
+        <span class="muted">共 {{ filteredReports.length }} 条报告</span>
       </div>
 
-      <el-table
-        :data="pagedReports"
-        border
-        stripe
-        style="width: 100%"
-      >
-        <el-table-column
-          prop="id"
-          label="报告 ID"
-          width="160"
-          show-overflow-tooltip
-        />
-        <el-table-column
-          prop="incidentId"
-          label="关联事件 ID"
-          width="150"
-        >
+      <el-table v-loading="loading" :data="pagedReports" border stripe style="width: 100%">
+        <el-table-column prop="id" label="报告 ID" width="160" show-overflow-tooltip />
+        <el-table-column prop="incident_id" label="关联事件 ID" width="160" show-overflow-tooltip>
           <template #default="{ row }">
             <router-link
               class="link"
-              :to="{ name: 'incident-detail', params: { id: row.incidentId } }"
+              :to="{ name: 'incident-detail', params: { id: row.incident_id } }"
             >
-              {{ row.incidentId }}
+              {{ row.incident_id }}
             </router-link>
           </template>
         </el-table-column>
-        <el-table-column
-          prop="createdAt"
-          label="生成时间"
-          width="180"
-        />
-        <el-table-column
-          prop="modelVersion"
-          label="模型版本"
-          width="140"
-        />
-        <el-table-column
-          prop="summary"
-          label="报告摘要"
-          show-overflow-tooltip
-        />
-        <el-table-column
-          label="操作"
-          fixed="right"
-          width="140"
-        >
+        <el-table-column label="生成时间" width="180">
+          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column prop="model" label="模型版本" width="160" show-overflow-tooltip />
+        <el-table-column label="报告摘要" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.incident_title || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="置信度" width="90" align="center">
           <template #default="{ row }">
-            <el-button
-              size="small"
-              text
-              type="primary"
-              @click="goDetail(row)"
-            >
+            {{ row.confidence != null ? Math.round(Number(row.confidence)) + '%' : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" fixed="right" width="120">
+          <template #default="{ row }">
+            <el-button size="small" text type="primary" @click="goDetail(row)">
               查看详情
             </el-button>
           </template>
@@ -132,15 +86,19 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { LLMReportsApi } from '../../api/llmReports'
 
 const router = useRouter()
+
+const loading = ref(false)
+const allReports = ref([])
 
 const filters = reactive({
   incidentId: '',
   dateRange: [],
-  modelVersion: '',
 })
 
 const pagination = reactive({
@@ -148,23 +106,18 @@ const pagination = reactive({
   pageSize: 10,
 })
 
-const allReports = ref(generateMockReports())
-
 const filteredReports = computed(() => {
-  const { incidentId, dateRange, modelVersion } = filters
+  const { incidentId, dateRange } = filters
 
   return allReports.value.filter((item) => {
-    if (incidentId && !item.incidentId.toLowerCase().includes(incidentId.trim().toLowerCase())) {
-      return false
-    }
-
-    if (modelVersion && item.modelVersion !== modelVersion) {
+    if (incidentId && !item.incident_id.toLowerCase().includes(incidentId.trim().toLowerCase())) {
       return false
     }
 
     if (dateRange && dateRange.length === 2) {
       const [start, end] = dateRange
-      if (item.date < start || item.date > end) return false
+      const date = toDateOnly(item.created_at)
+      if (date < start || date > end) return false
     }
 
     return true
@@ -184,40 +137,43 @@ function handleSearch() {
 function handleReset() {
   filters.incidentId = ''
   filters.dateRange = []
-  filters.modelVersion = ''
   pagination.currentPage = 1
 }
 
 function goDetail(row) {
-  router.push({ name: 'llm-report-detail', params: { id: row.id } })
+  router.push({ name: 'incident-detail', params: { id: row.incident_id } })
 }
 
-function generateMockReports() {
-  const today = new Date()
-  const pad = (n) => (n < 10 ? `0${n}` : n)
-  const models = ['llm-sec-1.0', 'llm-sec-1.1', 'llm-sec-2.0']
+function formatDateTime(value) {
+  if (!value) return '-'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  return d.toLocaleString('zh-CN', { hour12: false })
+}
 
-  const list = []
-  for (let i = 1; i <= 26; i += 1) {
-    const day = new Date(today.getTime() - (i % 10) * 24 * 60 * 60 * 1000)
-    const date = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`
-    const time = `${date} ${pad(9 + (i % 6))}:${pad((i * 5) % 60)}:${pad((i * 13) % 60)}`
+function toDateOnly(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
-    list.push({
-      id: `LLM-${20240000 + i}`,
-      incidentId: `INC-${20240000 + (i % 20) + 1}`,
-      date,
-      createdAt: time,
-      modelVersion: models[i % models.length],
-      summary:
-        i % 2 === 0
-          ? '疑似 SQL 注入攻击，请求参数中包含可疑关键字和堆叠查询。'
-          : '触发多次异常访问规则，疑似暴力破解或弱口令探测行为。',
-    })
+async function loadReports() {
+  loading.value = true
+  try {
+    const result = await LLMReportsApi.list({ limit: 500, offset: 0 })
+    allReports.value = Array.isArray(result?.items) ? result.items : []
+  } catch (error) {
+    ElMessage.error(`加载报告列表失败：${error?.message || '未知错误'}`)
+  } finally {
+    loading.value = false
   }
-
-  return list
 }
+
+onMounted(loadReports)
 </script>
 
 <style scoped>
@@ -251,9 +207,6 @@ function generateMockReports() {
 }
 
 .table-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   margin-bottom: 12px;
 }
 

@@ -9,10 +9,12 @@ import { eventsRouter } from "./routes/events.routes";
 import { forensicsRouter } from "./routes/forensics.routes";
 import { ingestionRouter } from "./routes/ingestion.routes";
 import { incidentsRouter } from "./routes/incidents.routes";
-import { llmReportsRouter } from "./routes/llm-reports.routes";
+import { llmReportsRouter, llmGlobalRouter } from "./routes/llm-reports.routes";
 import { mcpRouter } from "./routes/mcp.routes";
 import { policiesRouter } from "./routes/policies.routes";
 import { settingsRouter } from "./routes/settings.routes";
+import { ipWhitelistRouter } from "./routes/ip-whitelist.routes";
+import { geoBlockRouter } from "./routes/geo-block.routes";
 
 export const apiRouter = Router();
 
@@ -29,4 +31,7 @@ apiRouter.use("/assets", assetsRouter);
 apiRouter.use("/mcp", mcpRouter);
 apiRouter.use(forensicsRouter);
 apiRouter.use("/incidents", llmReportsRouter);
+apiRouter.use("/llm-reports", llmGlobalRouter);
 apiRouter.use("/settings", settingsRouter);
+apiRouter.use("/ip-whitelist", ipWhitelistRouter);
+apiRouter.use("/geo-block", geoBlockRouter);

@@ -339,6 +339,7 @@ async function triggerAnalyze(row) {
       limit: 100,
       requested_by: 'frontend-user',
     })
+    row.llmStatus = 'completed'
     ElMessage.success(`已触发事件 ${row.id} 的 LLM 分析`)
   } catch (error) {
     row.llmStatus = 'failed'
@@ -497,7 +498,7 @@ async function loadIncidents() {
         method: '-',
         riskLevel: mapSeverityToUi(item.severity),
         status: mapStatusToUi(item.status),
-        llmStatus: 'not_started',
+        llmStatus: item.has_llm_report ? 'completed' : 'not_started',
         source: '事件引擎',
         sourceKey: 'backend',
       }

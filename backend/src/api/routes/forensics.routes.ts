@@ -7,6 +7,7 @@ import { z } from "zod";
 import { asyncHandler } from "../../core/http/async-handler";
 import { env } from "../../core/config/env";
 import { query } from "../../core/db/pool";
+import { parseLimit, parseOffset } from "../../core/http/query-utils";
 import { logger } from "../../core/logger";
 
 const captureSchema = z.object({
@@ -143,6 +144,37 @@ const triggerForensicsCapture = async (params: {
 };
 
 export const forensicsRouter = Router();
+
+forensicsRouter.get(
+  "/forensics",
+  asyncHandler(async (req, res) => {
+    const limit = parseLimit(req.query.limit as string | undefined, 100);
+    const offset = parseOffset(req.query.offset as string | undefined);
+
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (req.query.status) {
+      params.push(req.query.status);
+      conditions.push(`status = $${params.length}`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    params.push(limit);
+    params.push(offset);
+
+    const result = await query(
+      `SELECT id, incident_id, ts_start, ts_end, filter, pcap_uri, sha256, size_bytes, status, error_message, created_at, completed_at
+       FROM forensics
+       ${where}
+       ORDER BY created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
+
+    res.json({ items: result.rows, limit, offset });
+  })
+);
 
 forensicsRouter.post(
   "/incidents/:id/forensics/capture",

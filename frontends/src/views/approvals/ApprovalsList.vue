@@ -141,6 +141,14 @@
             >
               拒绝
             </el-button>
+            <el-button
+              size="small"
+              text
+              type="danger"
+              @click="removeApproval(row)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -162,7 +170,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ApprovalsApi } from '../../api/approvals'
 
 const router = useRouter()
@@ -299,6 +307,28 @@ async function reject(row) {
     await loadApprovals()
   } catch (error) {
     ElMessage.error(`审批拒绝失败：${error?.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function removeApproval(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除审批单 ${row.id.slice(0, 8)}...（${statusLabel(row.status)}）吗？此操作不可恢复。`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  loading.value = true
+  try {
+    await ApprovalsApi.remove(row.id)
+    ElMessage.success('审批单已删除')
+    await loadApprovals()
+  } catch (error) {
+    ElMessage.error(error?.message || '删除失败')
   } finally {
     loading.value = false
   }

@@ -8,14 +8,9 @@
     <el-card class="filter-card" shadow="never">
       <el-form :inline="true" :model="filters" class="filter-form">
         <el-form-item label="状态">
-          <el-select
-            v-model="filters.status"
-            placeholder="全部"
-            clearable
-            style="width: 180px"
-          >
+          <el-select v-model="filters.status" placeholder="全部" clearable style="width: 180px">
             <el-option label="排队中" value="queued" />
-            <el-option label="进行中" value="running" />
+            <el-option label="抓包中" value="capturing" />
             <el-option label="已完成" value="completed" />
             <el-option label="已失败" value="failed" />
           </el-select>
@@ -31,61 +26,45 @@
           />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">
-            查询
-          </el-button>
-          <el-button @click="handleReset">
-            重置
-          </el-button>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="goNewTask">
-            新建取证任务
-          </el-button>
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
     <el-card shadow="never" class="table-card">
-      <el-table :data="filteredTasks" border stripe style="width: 100%">
-        <el-table-column prop="id" label="任务 ID" width="140" />
-        <el-table-column prop="incidentId" label="关联事件 ID" width="150">
+      <el-table v-loading="loading" :data="filteredTasks" border stripe style="width: 100%">
+        <el-table-column prop="id" label="任务 ID" width="160" show-overflow-tooltip />
+        <el-table-column label="关联事件 ID" width="160" show-overflow-tooltip>
           <template #default="{ row }">
             <router-link
-              v-if="row.incidentId"
+              v-if="row.incident_id"
               class="link"
-              :to="{ name: 'incident-detail', params: { id: row.incidentId } }"
+              :to="{ name: 'incident-detail', params: { id: row.incident_id } }"
             >
-              {{ row.incidentId }}
+              {{ row.incident_id }}
             </router-link>
             <span v-else class="muted">未关联</span>
           </template>
         </el-table-column>
-        <el-table-column prop="timeRange" label="抓包时间范围" width="220" />
-        <el-table-column prop="interface" label="网卡接口" width="120" />
-        <el-table-column prop="bpf" label="BPF 过滤表达式" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="status" label="状态" width="120">
+        <el-table-column label="抓包时间范围" width="240">
+          <template #default="{ row }">{{ formatTimeRange(row.ts_start, row.ts_end) }}</template>
+        </el-table-column>
+        <el-table-column label="过滤表达式" prop="filter" show-overflow-tooltip />
+        <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" size="small">
-              {{ statusLabel(row.status) }}
-            </el-tag>
+            <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" width="180" />
-        <el-table-column prop="finishedAt" label="完成时间" width="180" />
-        <el-table-column label="操作" fixed="right" width="200">
+        <el-table-column label="创建时间" width="180">
+          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="完成时间" width="180">
+          <template #default="{ row }">{{ formatDateTime(row.completed_at) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" fixed="right" width="140">
           <template #default="{ row }">
-            <el-button size="small" text type="primary" @click="goDetail(row)">
-              查看详情
-            </el-button>
-            <el-button
-              size="small"
-              text
-              type="success"
-              :disabled="row.status !== 'completed'"
-            >
-              下载 PCAP
-            </el-button>
+            <el-button size="small" text type="primary" @click="goDetail(row)">查看详情</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -94,26 +73,28 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { ForensicsApi } from '../../api/forensics'
 
 const router = useRouter()
+const loading = ref(false)
+const allTasks = ref([])
 
 const filters = reactive({
   status: '',
   dateRange: [],
 })
 
-const tasks = ref(createMockTasks())
-
 const filteredTasks = computed(() => {
   const { status, dateRange } = filters
-
-  return tasks.value.filter((item) => {
+  return allTasks.value.filter((item) => {
     if (status && item.status !== status) return false
     if (dateRange && dateRange.length === 2) {
       const [start, end] = dateRange
-      if (item.date < start || item.date > end) return false
+      const date = toDateOnly(item.created_at)
+      if (date < start || date > end) return false
     }
     return true
   })
@@ -126,114 +107,74 @@ function handleReset() {
   filters.dateRange = []
 }
 
-function goNewTask() {
-  router.push({ name: 'forensics-new' })
-}
-
 function goDetail(row) {
   router.push({ name: 'forensics-detail', params: { id: row.id } })
 }
 
 function statusLabel(status) {
   switch (status) {
-    case 'queued':
-      return '排队中'
-    case 'running':
-      return '进行中'
-    case 'completed':
-      return '已完成'
-    case 'failed':
-      return '已失败'
-    default:
-      return status
+    case 'queued': return '排队中'
+    case 'capturing': return '抓包中'
+    case 'completed': return '已完成'
+    case 'failed': return '已失败'
+    default: return status || '-'
   }
 }
 
 function statusTagType(status) {
   switch (status) {
-    case 'queued':
-      return 'info'
-    case 'running':
-      return 'warning'
-    case 'completed':
-      return 'success'
-    case 'failed':
-      return 'danger'
-    default:
-      return ''
+    case 'queued': return 'info'
+    case 'capturing': return 'warning'
+    case 'completed': return 'success'
+    case 'failed': return 'danger'
+    default: return ''
   }
 }
 
-function createMockTasks() {
-  const today = new Date()
-  const pad = (n) => (n < 10 ? `0${n}` : n)
-  const statuses = ['queued', 'running', 'completed', 'failed', 'completed']
-
-  const list = []
-  for (let i = 1; i <= 18; i += 1) {
-    const day = new Date(today.getTime() - (i % 6) * 24 * 60 * 60 * 1000)
-    const date = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`
-    const createdAt = `${date} ${pad(9 + (i % 5))}:${pad((i * 3) % 60)}:${pad((i * 7) % 60)}`
-    const finishedAt =
-      i % 3 === 0
-        ? `${date} ${pad(10 + (i % 5))}:${pad((i * 3 + 10) % 60)}:${pad((i * 7 + 20) % 60)}`
-        : ''
-    const status = statuses[i % statuses.length]
-
-    list.push({
-      id: `FOR-${20240000 + i}`,
-      incidentId: i % 2 === 0 ? `INC-${20240020 + (i % 5)}` : '',
-      timeRange: `${date} 09:00 ~ ${date} 10:00`,
-      interface: `eth${i % 3}`,
-      bpf: 'tcp port 443 and host api.example.com',
-      status,
-      date,
-      createdAt,
-      finishedAt: status === 'completed' ? finishedAt : '',
-    })
-  }
-
-  return list
+function formatDateTime(value) {
+  if (!value) return '-'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  return d.toLocaleString('zh-CN', { hour12: false })
 }
+
+function formatTimeRange(start, end) {
+  if (!start && !end) return '-'
+  return `${formatDateTime(start)} ~ ${formatDateTime(end)}`
+}
+
+function toDateOnly(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+async function loadTasks() {
+  loading.value = true
+  try {
+    const result = await ForensicsApi.list({ limit: 200, offset: 0 })
+    allTasks.value = Array.isArray(result?.items) ? result.items : []
+  } catch (error) {
+    ElMessage.error(`加载取证任务列表失败：${error?.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadTasks)
 </script>
 
 <style scoped>
-.page-wrapper {
-  padding: 24px;
-  color: var(--text-color);
-}
-
-.page-header h2 {
-  margin: 0 0 4px;
-}
-
-.page-header p {
-  margin: 0 0 16px;
-  color: var(--muted-color);
-  font-size: 13px;
-}
-
-.filter-card {
-  margin-bottom: 16px;
-}
-
-.filter-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-}
-
-.table-card {
-  margin-top: 8px;
-}
-
-.muted {
-  color: var(--muted-color);
-  font-size: 12px;
-}
-
-.link {
-  color: #2563eb;
-}
+.page-wrapper { padding: 24px; color: var(--text-color); }
+.page-header h2 { margin: 0 0 4px; }
+.page-header p { margin: 0 0 16px; color: var(--muted-color); font-size: 13px; }
+.filter-card { margin-bottom: 16px; }
+.filter-form { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.table-card { margin-top: 8px; }
+.muted { color: var(--muted-color); font-size: 12px; }
+.link { color: #2563eb; }
 </style>
-
