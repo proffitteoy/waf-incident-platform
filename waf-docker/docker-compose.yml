@@ -11,7 +11,7 @@
       - "55432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
+      - ../infrastructure/postgres/init:/docker-entrypoint-initdb.d
     networks:
       - waf-net
 
@@ -30,11 +30,11 @@
     container_name: waf-backend
     working_dir: /app
     volumes:
-      - ./backend:/app
+      - ../backend:/app
       - /app/node_modules
-      - ./storage/logs:/app/storage/logs
-      - ./storage/pcap:/app/storage/pcap
-      - ./services/forensics-worker:/services/forensics-worker
+      - ../storage/logs:/app/storage/logs
+      - ../storage/pcap:/app/storage/pcap
+      - ../services/forensics-worker:/services/forensics-worker
     environment:
       - BACKEND_PORT=3000
       - POSTGRES_HOST=postgres
@@ -65,11 +65,11 @@
     working_dir: /app
     restart: unless-stopped
     volumes:
-      - ./backend:/app
+      - ../backend:/app
       - /app/node_modules
-      - ./storage/logs:/app/storage/logs
+      - ../storage/logs:/app/storage/logs
     env_file:
-      - ./backend/.env
+      - ../backend/.env
     environment:
       - BACKEND_API_URL=http://backend:3000
       - WAF_AUDIT_LOG_PATH=/app/storage/logs/waf-audit.log
@@ -91,7 +91,7 @@
     container_name: waf-frontend
     working_dir: /app
     volumes:
-      - ./frontends:/app
+      - ../frontends:/app
       - /app/node_modules
     command: sh -c "if [ ! -x node_modules/.bin/vite ]; then npm install; fi && npm run dev -- --host"
     environment:
@@ -104,33 +104,33 @@
   # WAF网关：OpenResty + ModSecurity + Lua Actuator
   waf:
     build:
-      context: ./infrastructure/waf
+      context: ../infrastructure/waf
       dockerfile: Dockerfile
     container_name: waf-gateway
     restart: always
     env_file:
-      - ./backend/.env
+      - ../backend/.env
     ports:
       - "80:80"
     environment:
-      # 目标网站地址由 ./backend/.env 的 WEBSITE_URL 提供
+      # 目标网站地址由 ../backend/.env 的 WEBSITE_URL 提供
       # Redis 连接配置 (供 Lua 脚本使用)
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_KEY_PREFIX=waf:mvp
     volumes:
       # OpenResty Nginx 配置文件
-      - ./infrastructure/nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - ../infrastructure/nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
       # Lua 脚本
-      - ./infrastructure/waf/runtime/access_check.lua:/usr/local/openresty/nginx/lua/access_check.lua
+      - ../infrastructure/waf/runtime/access_check.lua:/usr/local/openresty/nginx/lua/access_check.lua
       # WAF 规则与配置
-      - ./infrastructure/waf/runtime/modsecurity3.conf:/etc/modsecurity.d/modsecurity.conf
-      - ./infrastructure/waf/runtime/crs-setup.conf:/etc/modsecurity.d/crs-setup.conf
-      - ./infrastructure/waf/runtime/10-project-overrides.conf:/etc/modsecurity.d/10-project-overrides.conf
-      - ./infrastructure/waf/runtime/main.conf:/etc/modsecurity.d/main.conf
-      - ./infrastructure/waf/runtime/rules:/etc/modsecurity.d/rules
+      - ../infrastructure/waf/runtime/modsecurity3.conf:/etc/modsecurity.d/modsecurity.conf
+      - ../infrastructure/waf/runtime/crs-setup.conf:/etc/modsecurity.d/crs-setup.conf
+      - ../infrastructure/waf/runtime/10-project-overrides.conf:/etc/modsecurity.d/10-project-overrides.conf
+      - ../infrastructure/waf/runtime/main.conf:/etc/modsecurity.d/main.conf
+      - ../infrastructure/waf/runtime/rules:/etc/modsecurity.d/rules
       # 日志共享
-      - ./storage/logs:/var/log/modsec
+      - ../storage/logs:/var/log/modsec
     depends_on:
       - backend
       - redis
@@ -143,8 +143,8 @@
     container_name: waf-forensics
     working_dir: /app
     volumes:
-      - ./services/forensics-worker:/app
-      - ./storage/pcap:/app/storage/pcap
+      - ../services/forensics-worker:/app
+      - ../storage/pcap:/app/storage/pcap
     # 共享 WAF 的网络栈以实现流量抓取
     network_mode: "service:waf"
     cap_add:
