@@ -82,6 +82,7 @@ waf-incident-platform/
 适用于联调、演示或验收环境，一条命令启动完整服务栈（postgres/redis/backend/frontend/waf/forensics-worker/ingestion-worker）。
 
 需要在包含 docker-compose.yml目录下运行
+`cd waf-docker`
 1. 复制后端环境变量模板：`copy backend\\.env.example backend\\.env`
 2. 在 `backend/.env` 中填写目标防御网站：
    - `WEBSITE_URL=http://host.docker.internal:8080`（示例）
