@@ -82,17 +82,18 @@ waf-incident-platform/
 适用于联调、演示或验收环境，一条命令启动完整服务栈（postgres/redis/backend/frontend/waf/forensics-worker/ingestion-worker）。
 
 需要在包含 docker-compose.yml目录下运行
+`cd waf-docker`
 1. 复制后端环境变量模板：`copy backend\\.env.example backend\\.env`
 2. 在 `backend/.env` 中填写目标防御网站：
    - `WEBSITE_URL=http://host.docker.internal:8080`（示例）
    - 若要防护其他站点，替换为实际上游地址（如 `http://example.internal:8080`）。
    - `waf` 服务会通过 `env_file: ./backend/.env` 注入该变量，`infrastructure/nginx/nginx.conf` 使用 `WEBSITE_URL` 作为反向代理上游。
-3. 建议先做启动前检查：`powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\check-preflight.ps1`
-4. 全量启动（含构建，首次或变更镜像使用）：`docker compose up -d --build`
-5. 查看服务状态：`docker compose ps`
-6. 查看后端与自动入库 worker 日志（可选）：`docker compose logs -f backend ingestion-worker`
 
-7. 首次成功后，日常启动不要每次都带 `--build`，使用：`docker compose up -d`
+3. 全量启动（含构建，首次或变更镜像使用）：`docker compose up -d --build`
+4. 查看服务状态：`docker compose ps`
+5. 查看后端与自动入库 worker 日志（可选）：`docker compose logs -f backend ingestion-worker`
+
+6. 首次成功后，日常启动不要每次都带 `--build`，使用：`docker compose up -d`
 
 访问入口：
 - 前端：http://localhost:5173
